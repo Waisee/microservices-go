@@ -9,7 +9,7 @@ package inventoryv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	_ "google.golang.org/protobuf/types/known/timestamppb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -26,11 +26,16 @@ const (
 type PartType int32
 
 const (
+	// Неопределенный компонент
 	PartType_PART_TYPE_UNSPECIFIED PartType = 0
-	PartType_PART_TYPE_HULL        PartType = 1
-	PartType_PART_TYPE_ENGINE      PartType = 2
-	PartType_PART_TYPE_SHIELD      PartType = 3
-	PartType_PART_TYPE_WEAPON      PartType = 4
+	// Оболочка
+	PartType_PART_TYPE_HULL PartType = 1
+	// Двигатель
+	PartType_PART_TYPE_ENGINE PartType = 2
+	// Щит
+	PartType_PART_TYPE_SHIELD PartType = 3
+	// Вооружение
+	PartType_PART_TYPE_WEAPON PartType = 4
 )
 
 // Enum value maps for PartType.
@@ -93,6 +98,8 @@ type Part struct {
 	PartType PartType `protobuf:"varint,5,opt,name=part_type,json=partType,proto3,enum=inventory.v1.PartType" json:"part_type,omitempty"`
 	// Количество на складе
 	StockQuantity int64 `protobuf:"varint,6,opt,name=stock_quantity,json=stockQuantity,proto3" json:"stock_quantity,omitempty"`
+	// Время создания
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -169,10 +176,18 @@ func (x *Part) GetStockQuantity() int64 {
 	return 0
 }
 
+func (x *Part) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 // Запрос на получение детали по UUID
 type GetPartRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Uuid          string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// uuid идентификатор детали
+	Uuid          string `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -216,8 +231,9 @@ func (x *GetPartRequest) GetUuid() string {
 
 // Ответ на запрос GetPart
 type GetPartResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Part          *Part                  `protobuf:"bytes,1,opt,name=part,proto3" json:"part,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// part деталь
+	Part          *Part `protobuf:"bytes,1,opt,name=part,proto3" json:"part,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -261,9 +277,13 @@ func (x *GetPartResponse) GetPart() *Part {
 
 // Запрос на получение списка деталей
 type ListPartsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PartType      PartType               `protobuf:"varint,1,opt,name=part_type,json=partType,proto3,enum=inventory.v1.PartType" json:"part_type,omitempty"`
-	Uuids         []string               `protobuf:"bytes,2,rep,name=uuids,proto3" json:"uuids,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// part_type опциональный фильтр по типу детали.
+	// Применяется только если uuids не передан.
+	PartType PartType `protobuf:"varint,1,opt,name=part_type,json=partType,proto3,enum=inventory.v1.PartType" json:"part_type,omitempty"`
+	// uuids опциональный список UUID для выборки конкретных деталей.
+	// Если uuids передан, этот фильтр имеет приоритет над part_type.
+	Uuids         []string `protobuf:"bytes,2,rep,name=uuids,proto3" json:"uuids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -314,8 +334,9 @@ func (x *ListPartsRequest) GetUuids() []string {
 
 // Ответ на запрос на получение списка деталей
 type ListPartsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Parts         []*Part                `protobuf:"bytes,1,rep,name=parts,proto3" json:"parts,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// parts детали
+	Parts         []*Part `protobuf:"bytes,1,rep,name=parts,proto3" json:"parts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -361,14 +382,16 @@ var File_inventory_v1_inventory_proto protoreflect.FileDescriptor
 
 const file_inventory_v1_inventory_proto_rawDesc = "" +
 	"\n" +
-	"\x1cinventory/v1/inventory.proto\x12\finventory.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc2\x01\n" +
+	"\x1cinventory/v1/inventory.proto\x12\finventory.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfd\x01\n" +
 	"\x04Part\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x14\n" +
 	"\x05price\x18\x04 \x01(\x03R\x05price\x123\n" +
 	"\tpart_type\x18\x05 \x01(\x0e2\x16.inventory.v1.PartTypeR\bpartType\x12%\n" +
-	"\x0estock_quantity\x18\x06 \x01(\x03R\rstockQuantity\"$\n" +
+	"\x0estock_quantity\x18\x06 \x01(\x03R\rstockQuantity\x129\n" +
+	"\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"$\n" +
 	"\x0eGetPartRequest\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\"9\n" +
 	"\x0fGetPartResponse\x12&\n" +
@@ -403,27 +426,29 @@ func file_inventory_v1_inventory_proto_rawDescGZIP() []byte {
 var file_inventory_v1_inventory_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_inventory_v1_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_inventory_v1_inventory_proto_goTypes = []any{
-	(PartType)(0),             // 0: inventory.v1.PartType
-	(*Part)(nil),              // 1: inventory.v1.Part
-	(*GetPartRequest)(nil),    // 2: inventory.v1.GetPartRequest
-	(*GetPartResponse)(nil),   // 3: inventory.v1.GetPartResponse
-	(*ListPartsRequest)(nil),  // 4: inventory.v1.ListPartsRequest
-	(*ListPartsResponse)(nil), // 5: inventory.v1.ListPartsResponse
+	(PartType)(0),                 // 0: inventory.v1.PartType
+	(*Part)(nil),                  // 1: inventory.v1.Part
+	(*GetPartRequest)(nil),        // 2: inventory.v1.GetPartRequest
+	(*GetPartResponse)(nil),       // 3: inventory.v1.GetPartResponse
+	(*ListPartsRequest)(nil),      // 4: inventory.v1.ListPartsRequest
+	(*ListPartsResponse)(nil),     // 5: inventory.v1.ListPartsResponse
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
 }
 var file_inventory_v1_inventory_proto_depIdxs = []int32{
 	0, // 0: inventory.v1.Part.part_type:type_name -> inventory.v1.PartType
-	1, // 1: inventory.v1.GetPartResponse.part:type_name -> inventory.v1.Part
-	0, // 2: inventory.v1.ListPartsRequest.part_type:type_name -> inventory.v1.PartType
-	1, // 3: inventory.v1.ListPartsResponse.parts:type_name -> inventory.v1.Part
-	2, // 4: inventory.v1.InventoryService.GetPart:input_type -> inventory.v1.GetPartRequest
-	4, // 5: inventory.v1.InventoryService.ListParts:input_type -> inventory.v1.ListPartsRequest
-	3, // 6: inventory.v1.InventoryService.GetPart:output_type -> inventory.v1.GetPartResponse
-	5, // 7: inventory.v1.InventoryService.ListParts:output_type -> inventory.v1.ListPartsResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6, // 1: inventory.v1.Part.created_at:type_name -> google.protobuf.Timestamp
+	1, // 2: inventory.v1.GetPartResponse.part:type_name -> inventory.v1.Part
+	0, // 3: inventory.v1.ListPartsRequest.part_type:type_name -> inventory.v1.PartType
+	1, // 4: inventory.v1.ListPartsResponse.parts:type_name -> inventory.v1.Part
+	2, // 5: inventory.v1.InventoryService.GetPart:input_type -> inventory.v1.GetPartRequest
+	4, // 6: inventory.v1.InventoryService.ListParts:input_type -> inventory.v1.ListPartsRequest
+	3, // 7: inventory.v1.InventoryService.GetPart:output_type -> inventory.v1.GetPartResponse
+	5, // 8: inventory.v1.InventoryService.ListParts:output_type -> inventory.v1.ListPartsResponse
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_inventory_v1_inventory_proto_init() }

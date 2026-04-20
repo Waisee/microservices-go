@@ -11,16 +11,26 @@ service InventoryService {
   // GetPart возвращает деталь по UUID
   rpc GetPart(GetPartRequest) returns (GetPartResponse);
 
-  // ListParts возвращает список деталей с возможностью фильтрации по типу или по конкретным UUID
+  // ListParts возвращает список деталей.
+  // Оба фильтра (part_type и uuids) опциональны; если задан uuids, он имеет приоритет над part_type.
   rpc ListParts(ListPartsRequest) returns (ListPartsResponse);
 }
 
 // Тип детали
 enum PartType {
+  // Неопределенный компонент
   PART_TYPE_UNSPECIFIED = 0;
+
+  // Оболочка
   PART_TYPE_HULL = 1;
+
+  // Двигатель
   PART_TYPE_ENGINE = 2;
+
+  // Щит
   PART_TYPE_SHIELD = 3;
+
+  //Вооружение
   PART_TYPE_WEAPON = 4;
 }
 
@@ -43,25 +53,35 @@ message Part {
 
   // Количество на складе
   int64 stock_quantity = 6;
+
+  // Время создания
+  google.protobuf.Timestamp created_at = 7;
 }
 
 // Запрос на получение детали по UUID
 message GetPartRequest {
+  // uuid идентификатор детали
   string uuid = 1;
 }
 
 // Ответ на запрос GetPart
 message GetPartResponse {
+  // part деталь
   Part part = 1;
 }
 
 // Запрос на получение списка деталей
 message ListPartsRequest {
+  // part_type опциональный фильтр по типу детали.
+  // Применяется только если uuids не передан.
   PartType part_type = 1;
+  // uuids опциональный список UUID для выборки конкретных деталей.
+  // Если uuids передан, этот фильтр имеет приоритет над part_type.
   repeated string uuids = 2;
 }
 
 // Ответ на запрос на получение списка деталей
 message ListPartsResponse {
+  // parts детали
   repeated Part parts = 1;
 }

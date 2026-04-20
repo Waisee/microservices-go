@@ -31,7 +31,8 @@ const (
 type InventoryServiceClient interface {
 	// GetPart возвращает деталь по UUID
 	GetPart(ctx context.Context, in *GetPartRequest, opts ...grpc.CallOption) (*GetPartResponse, error)
-	// ListParts возвращает список деталей с возможностью фильтрации по типу или по конкретным UUID
+	// ListParts возвращает список деталей.
+	// Оба фильтра (part_type и uuids) опциональны; если задан uuids, он имеет приоритет над part_type.
 	ListParts(ctx context.Context, in *ListPartsRequest, opts ...grpc.CallOption) (*ListPartsResponse, error)
 }
 
@@ -71,7 +72,8 @@ func (c *inventoryServiceClient) ListParts(ctx context.Context, in *ListPartsReq
 type InventoryServiceServer interface {
 	// GetPart возвращает деталь по UUID
 	GetPart(context.Context, *GetPartRequest) (*GetPartResponse, error)
-	// ListParts возвращает список деталей с возможностью фильтрации по типу или по конкретным UUID
+	// ListParts возвращает список деталей.
+	// Оба фильтра (part_type и uuids) опциональны; если задан uuids, он имеет приоритет над part_type.
 	ListParts(context.Context, *ListPartsRequest) (*ListPartsResponse, error)
 	mustEmbedUnimplementedInventoryServiceServer()
 }

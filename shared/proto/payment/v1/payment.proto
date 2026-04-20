@@ -12,14 +12,24 @@ service PaymentService {
 
 // Способ оплаты
 enum PaymentMethod {
+  // Неопределенный метод оплаты
   PAYMENT_METHOD_UNSPECIFIED = 0;
+
+  // Оплата картой
   PAYMENT_METHOD_CARD = 1;
+
+  // Оплата через СБП
   PAYMENT_METHOD_SBP = 2;
+
+  // Оплата кредитной картой
   PAYMENT_METHOD_CREDIT_CARD = 3;
+
+  // Оплата деньгами инвестора
   PAYMENT_METHOD_INVESTOR_MONEY = 4;
 }
 
 // Запрос на оплату заказа
+// PAYMENT_METHOD_UNSPECIFIED недопустим и должен отклоняться валидатором
 message PayOrderRequest {
   // UUID заказа
   string order_uuid = 1;

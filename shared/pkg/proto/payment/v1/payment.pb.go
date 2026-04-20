@@ -25,10 +25,15 @@ const (
 type PaymentMethod int32
 
 const (
-	PaymentMethod_PAYMENT_METHOD_UNSPECIFIED    PaymentMethod = 0
-	PaymentMethod_PAYMENT_METHOD_CARD           PaymentMethod = 1
-	PaymentMethod_PAYMENT_METHOD_SBP            PaymentMethod = 2
-	PaymentMethod_PAYMENT_METHOD_CREDIT_CARD    PaymentMethod = 3
+	// Неопределенный метод оплаты
+	PaymentMethod_PAYMENT_METHOD_UNSPECIFIED PaymentMethod = 0
+	// Оплата картой
+	PaymentMethod_PAYMENT_METHOD_CARD PaymentMethod = 1
+	// Оплата через СБП
+	PaymentMethod_PAYMENT_METHOD_SBP PaymentMethod = 2
+	// Оплата кредитной картой
+	PaymentMethod_PAYMENT_METHOD_CREDIT_CARD PaymentMethod = 3
+	// Оплата деньгами инвестора
 	PaymentMethod_PAYMENT_METHOD_INVESTOR_MONEY PaymentMethod = 4
 )
 
@@ -78,6 +83,7 @@ func (PaymentMethod) EnumDescriptor() ([]byte, []int) {
 }
 
 // Запрос на оплату заказа
+// PAYMENT_METHOD_UNSPECIFIED недопустим и должен отклоняться валидатором
 type PayOrderRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// UUID заказа
