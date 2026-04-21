@@ -1,47 +1,76 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	svc "github.com/waisee/microservices-go/payment/pkg/service"
 	paymentv1 "github.com/waisee/microservices-go/shared/pkg/proto/payment/v1"
 )
 
-const grpcAddress = ":50052"
+const grpcAddress = "127.0.0.1:50052"
+const (
+	maxConnectionIdle     = 15 * time.Minute
+	maxConnectionAge      = 30 * time.Minute
+	maxConnectionAgeGrace = 5 * time.Second
+	keepaliveTime         = 5 * time.Minute
+	timeout               = 1 * time.Second
+	minTime               = 5 * time.Minute
+)
 
 func main() {
-	lis, err := net.Listen("tcp", grpcAddress)
+	var lc net.ListenConfig
+	lis, err := lc.Listen(context.Background(), "tcp", grpcAddress)
 	if err != nil {
 		slog.Error("не удалось создать listener", "error", err)
 		os.Exit(1)
 	}
 
-	// TODO: Настроить gRPC сервер с параметрами keepalive
-	// Подумайте, какие параметры стоит задать для production-ready сервера
-	// См. examples/week_1/GRPC_CONNECTIONS.md
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle:     maxConnectionIdle,
+			MaxConnectionAge:      maxConnectionAge,
+			MaxConnectionAgeGrace: maxConnectionAgeGrace,
+			Time:                  keepaliveTime,
+			Timeout:               timeout,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             minTime,
+			PermitWithoutStream: true,
+		}),
+	)
 	paymentv1.RegisterPaymentServiceServer(grpcServer, &svc.PaymentServer{})
 
 	// Включаем reflection для postman/grpcurl
 	reflection.Register(grpcServer)
 
-	slog.Info("запуск PaymentService", "адрес", grpcAddress)
+	slog.Info("запуск InventoryService", "адрес", grpcAddress)
 
-	// TODO: Реализовать graceful shutdown
-	// При получении сигнала SIGINT/SIGTERM сервер должен:
-	// 1. Перестать принимать новые соединения
-	// 2. Дождаться завершения текущих запросов
-	// 3. Корректно завершить работу
-	// Подсказка: используйте signal.Notify и grpcServer.GracefulStop()
+	// Контекст, который отменяется по SIGINT/SIGTERM или при падении сервера.
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
-	err = grpcServer.Serve(lis)
-	if err != nil {
-		slog.Error("ошибка запуска сервера", "error", err)
-		os.Exit(1)
-	}
+	go func() {
+		slog.Info("🚀 gRPC сервер запущен", "address", grpcAddress)
+		err = grpcServer.Serve(lis)
+		if err != nil {
+			slog.Error("ошибка запуска сервера", "error", err)
+			cancel()
+		}
+	}()
+
+	// Ждём сигнал от ОС или падение сервера.
+	<-ctx.Done()
+	slog.Info("🛑 остановка gRPC сервера")
+	grpcServer.GracefulStop()
+	slog.Info("✅ сервер остановлен")
 }
