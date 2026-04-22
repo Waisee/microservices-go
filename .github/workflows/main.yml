@@ -40,5 +40,4 @@ jobs:
 
       # 3. API-тесты (Логика для "второго PR")
       - name: Run API Tests
-        if: github.event_number > 1
         run: task test:api
