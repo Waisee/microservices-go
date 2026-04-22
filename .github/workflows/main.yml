@@ -15,11 +15,20 @@ jobs:
         with:
           fetch-depth: 0 # Нужно для анализа истории коммитов
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show Go version
+        run: go version
 
       # 1. Форматирование кода
       - name: Check Formatting
@@ -30,9 +39,6 @@ jobs:
         run: task lint
 
       # 3. API-тесты (Логика для "второго PR")
-      # В GitHub Actions нет встроенного счетчика "номер PR для юзера", 
-      # поэтому обычно используют проверку наличия определенных файлов или меток.
-      # Ниже пример запуска, если это Pull Request:
       - name: Run API Tests
         if: github.event_number > 1
         run: task test:api
