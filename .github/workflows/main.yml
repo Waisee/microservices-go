@@ -1,3 +1,38 @@
-task format     # Форматирование кода
-task lint       # Линтер без ошибок
-task test:api   # API-тесты (только для второго PR)
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Нужно для анализа истории коммитов
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 1. Форматирование кода
+      - name: Check Formatting
+        run: task format
+
+      # 2. Линтер
+      - name: Run Linter
+        run: task lint
+
+      # 3. API-тесты (Логика для "второго PR")
+      # В GitHub Actions нет встроенного счетчика "номер PR для юзера", 
+      # поэтому обычно используют проверку наличия определенных файлов или меток.
+      # Ниже пример запуска, если это Pull Request:
+      - name: Run API Tests
+        if: github.event_number > 1
+        run: task test:api
