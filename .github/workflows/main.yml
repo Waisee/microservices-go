@@ -1,0 +1,3 @@
+task format     # Форматирование кода
+task lint       # Линтер без ошибок
+task test:api   # API-тесты (только для второго PR)
