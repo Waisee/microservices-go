@@ -150,9 +150,6 @@ func (s *InventoryServer) ListParts(
 			if _, err := uuid.Parse(id); err != nil {
 				return nil, status.Errorf(codes.InvalidArgument, "неверный формат uuid: %s", id)
 			}
-			if _, ok := s.parts[uuid.MustParse(id)]; !ok {
-				return nil, status.Errorf(codes.NotFound, "деталь не найдена: %s", id)
-			}
 			part, ok := s.parts[uuid.MustParse(id)]
 			if !ok {
 				return nil, status.Errorf(codes.NotFound, "деталь не найдена: %s", id)

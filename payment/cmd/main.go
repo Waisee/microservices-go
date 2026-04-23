@@ -53,7 +53,7 @@ func main() {
 	// Включаем reflection для postman/grpcurl
 	reflection.Register(grpcServer)
 
-	slog.Info("запуск InventoryService", "адрес", grpcAddress)
+	slog.Info("запуск PaymentService", "адрес", grpcAddress)
 
 	// Контекст, который отменяется по SIGINT/SIGTERM или при падении сервера.
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

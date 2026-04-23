@@ -15,6 +15,14 @@ import (
 	paymentv1 "github.com/waisee/microservices-go/shared/pkg/proto/payment/v1"
 )
 
+const (
+    OrderStatusPendingPayment = "PENDING_PAYMENT"
+    OrderStatusPaid           = "PAID"
+    OrderStatusCancelled      = "CANCELLED"
+
+	rpcTimeout = 10 * time.Second
+)
+
 // Order представляет заказ на постройку космического корабля.
 type Order struct {
 	OrderUUID       uuid.UUID
@@ -143,7 +151,10 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrder
 		uuids = append(uuids, req.WeaponUUID.Value.String())
 	}
 
-	parts, err := h.inventoryClient.ListParts(ctx, &inventoryv1.ListPartsRequest{
+	rpcCtx, rpcCancel := context.WithTimeout(ctx, rpcTimeout)
+	defer rpcCancel()
+
+	parts, err := h.inventoryClient.ListParts(rpcCtx, &inventoryv1.ListPartsRequest{
 		Uuids: uuids,
 	})
 	if err != nil {
@@ -194,7 +205,7 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrder
 		ShieldUUID: &req.ShieldUUID.Value,
 		WeaponUUID: &req.WeaponUUID.Value,
 		TotalPrice: totalPrice,
-		Status:     "PENDING_PAYMENT",
+		Status:     OrderStatusPendingPayment,
 		CreatedAt:  time.Now(),
 	}
 
@@ -211,10 +222,14 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrder
 }
 
 func (h *OrderHandler) PayOrder(ctx context.Context, req *orderv1.PayOrderRequest, params orderv1.PayOrderParams) (orderv1.PayOrderRes, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// 1. Найти заказ в store
-	h.store.mu.RLock()
+	h.store.mu.Lock()
+	defer h.store.mu.Unlock()
+
 	order, ok := h.store.orders[params.OrderUUID]
-	h.store.mu.RUnlock()
 
 	if !ok {
 		return &orderv1.PayOrderNotFound{
@@ -224,7 +239,7 @@ func (h *OrderHandler) PayOrder(ctx context.Context, req *orderv1.PayOrderReques
 	}
 
 	// 2. Проверить статус == PENDING_PAYMENT
-	if order.Status != "PENDING_PAYMENT" {
+	if order.Status != OrderStatusPendingPayment {
 		return &orderv1.PayOrderConflict{
 			Code:    http.StatusConflict,
 			Message: "заказ не в статусе PENDING_PAYMENT",
@@ -232,7 +247,10 @@ func (h *OrderHandler) PayOrder(ctx context.Context, req *orderv1.PayOrderReques
 	}
 
 	// 3. Вызвать h.paymentClient.PayOrder для обработки платежа
-	paymentResponse, err := h.paymentClient.PayOrder(ctx, &paymentv1.PayOrderRequest{
+	rpcCtx, rpcCancel := context.WithTimeout(ctx, rpcTimeout)
+	defer rpcCancel()
+
+	paymentResponse, err := h.paymentClient.PayOrder(rpcCtx, &paymentv1.PayOrderRequest{
 		OrderUuid:     params.OrderUUID.String(),
 		PaymentMethod: openapiPaymentMethodToProto(req.GetPaymentMethod()),
 	})
@@ -244,7 +262,7 @@ func (h *OrderHandler) PayOrder(ctx context.Context, req *orderv1.PayOrderReques
 	}
 
 	// 4. Обновить статус на PAID и сохранить transaction_uuid
-	order.Status = "PAID"
+	order.Status = OrderStatusPaid
 	transactionUUID, err := uuid.Parse(paymentResponse.GetTransactionUuid())
 	if err != nil {
 		return &orderv1.PayOrderInternalServerError{
@@ -256,9 +274,7 @@ func (h *OrderHandler) PayOrder(ctx context.Context, req *orderv1.PayOrderReques
 	pm := string(req.GetPaymentMethod())
 	order.PaymentMethod = &pm
 
-	h.store.mu.Lock()
 	h.store.orders[params.OrderUUID] = order
-	h.store.mu.Unlock()
 
 	// 5. Вернуть transaction_uuid
 	return &orderv1.PayOrderResponse{
@@ -268,9 +284,10 @@ func (h *OrderHandler) PayOrder(ctx context.Context, req *orderv1.PayOrderReques
 
 func (h *OrderHandler) CancelOrder(ctx context.Context, params orderv1.CancelOrderParams) (orderv1.CancelOrderRes, error) {
 	// 1. Найти заказ в store
-	h.store.mu.RLock()
+	h.store.mu.Lock()
+	defer h.store.mu.Unlock()
+
 	order, ok := h.store.orders[params.OrderUUID]
-	h.store.mu.RUnlock()
 
 	if !ok {
 		return &orderv1.CancelOrderNotFound{
@@ -280,7 +297,7 @@ func (h *OrderHandler) CancelOrder(ctx context.Context, params orderv1.CancelOrd
 	}
 
 	// 2. Проверить статус == PENDING_PAYMENT
-	if order.Status != "PENDING_PAYMENT" {
+	if order.Status != OrderStatusPendingPayment {
 		return &orderv1.CancelOrderConflict{
 			Code:    http.StatusConflict,
 			Message: "заказ не в статусе PENDING_PAYMENT",
@@ -288,10 +305,9 @@ func (h *OrderHandler) CancelOrder(ctx context.Context, params orderv1.CancelOrd
 	}
 
 	// 3. Обновить статус на CANCELLED
-	order.Status = "CANCELLED"
-	h.store.mu.Lock()
+	order.Status = OrderStatusCancelled
+
 	h.store.orders[params.OrderUUID] = order
-	h.store.mu.Unlock()
 
 	// 4. Вернуть success
 	return &orderv1.CancelOrderResponse{}, nil
