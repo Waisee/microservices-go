@@ -16,9 +16,9 @@ import (
 )
 
 const (
-    OrderStatusPendingPayment = "PENDING_PAYMENT"
-    OrderStatusPaid           = "PAID"
-    OrderStatusCancelled      = "CANCELLED"
+	OrderStatusPendingPayment = "PENDING_PAYMENT"
+	OrderStatusPaid           = "PAID"
+	OrderStatusCancelled      = "CANCELLED"
 
 	rpcTimeout = 10 * time.Second
 )
@@ -222,9 +222,6 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrder
 }
 
 func (h *OrderHandler) PayOrder(ctx context.Context, req *orderv1.PayOrderRequest, params orderv1.PayOrderParams) (orderv1.PayOrderRes, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	// 1. Найти заказ в store
 	h.store.mu.Lock()
 	defer h.store.mu.Unlock()
