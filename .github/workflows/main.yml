@@ -1,0 +1,43 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Нужно для анализа истории коммитов
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show Go version
+        run: go version
+
+      # 1. Форматирование кода
+      - name: Check Formatting
+        run: task format
+
+      # 2. Линтер
+      - name: Run Linter
+        run: task lint
+
+      # 3. API-тесты (Логика для "второго PR")
+      - name: Run API Tests
+        run: task test:api
