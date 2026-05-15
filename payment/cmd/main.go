@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -13,8 +12,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
-	svc "github.com/waisee/microservices-go/payment/pkg/service"
-	paymentv1 "github.com/waisee/microservices-go/shared/pkg/proto/payment/v1"
+	app "github.com/waisee/microservices-go/payment/pkg/app"
 )
 
 const grpcAddress = "127.0.0.1:50052"
@@ -28,12 +26,13 @@ const (
 )
 
 func main() {
-	var lc net.ListenConfig
-	lis, err := lc.Listen(context.Background(), "tcp", grpcAddress)
+	//nolint:noctx // Контекст здесь не нужен: GracefulStop() сам закроет listener и прервёт Accept()
+	lis, err := net.Listen("tcp", grpcAddress)
 	if err != nil {
-		slog.Error("не удалось создать listener", "error", err)
-		os.Exit(1)
+		slog.Error("ошибка запуска слушателя", "error", err)
+		return
 	}
+	// Примечание: defer lis.Close() не нужен, так как GracefulStop() закрывает listener автоматически
 
 	grpcServer := grpc.NewServer(
 		grpc.KeepaliveParams(keepalive.ServerParameters{
@@ -48,7 +47,8 @@ func main() {
 			PermitWithoutStream: true,
 		}),
 	)
-	paymentv1.RegisterPaymentServiceServer(grpcServer, &svc.PaymentServer{})
+
+	app.RegisterServices(grpcServer)
 
 	// Включаем reflection для postman/grpcurl
 	reflection.Register(grpcServer)
