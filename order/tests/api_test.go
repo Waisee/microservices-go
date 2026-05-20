@@ -27,7 +27,7 @@ import (
 	paymentv1 "github.com/waisee/microservices-go/shared/pkg/proto/payment/v1"
 )
 
-// Предзагруженные UUID и цены деталей (из inventory/cmd/main.go)
+// Предзагруженные UUID и цены деталей (из inventory/cmd/main.go).
 const (
 	HullAluminumUUID   = "550e8400-e29b-41d4-a716-446655440001" // 500000 kopecks (5000 RUB)
 	HullTitaniumUUID   = "550e8400-e29b-41d4-a716-446655440002" // 1500000 kopecks (15000 RUB)
@@ -37,7 +37,7 @@ const (
 	WeaponLaserUUID    = "550e8400-e29b-41d4-a716-446655440006" // 250000 kopecks (2500 RUB)
 	HullOutOfStockUUID = "550e8400-e29b-41d4-a716-446655440007" // 2000000 kopecks (20000 RUB), stock=0
 
-	// Цены в копейках
+	// Цены в копейках.
 	HullAluminumPrice   = 500000
 	HullTitaniumPrice   = 1500000
 	EngineIonCPrice     = 300000
@@ -67,12 +67,12 @@ func payBufDialer(context.Context, string) (net.Conn, error) {
 	return payLis.Dial()
 }
 
-// orderBaseURL возвращает базовый URL для HTTP тестов заказов
+// orderBaseURL возвращает базовый URL для HTTP тестов заказов.
 func orderBaseURL() string {
 	return ts.URL
 }
 
-// TestMain запускает все сервисы перед тестами и останавливает после
+// TestMain запускает все сервисы перед тестами и останавливает после.
 func TestMain(m *testing.M) {
 	// 1. Inventory gRPC через bufconn
 	invLis = bufconn.Listen(bufSize)
@@ -131,9 +131,9 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// HTTP типы запросов/ответов
+// HTTP типы запросов/ответов.
 
-// CreateOrderRequest представляет тело запроса для создания заказа
+// CreateOrderRequest представляет тело запроса для создания заказа.
 type CreateOrderRequest struct {
 	HullUUID   string  `json:"hull_uuid"`
 	EngineUUID string  `json:"engine_uuid"`
@@ -141,26 +141,26 @@ type CreateOrderRequest struct {
 	WeaponUUID *string `json:"weapon_uuid,omitempty"`
 }
 
-// CreateOrderResponse представляет ответ на создание заказа
+// CreateOrderResponse представляет ответ на создание заказа.
 type CreateOrderResponse struct {
 	OrderUUID  string `json:"order_uuid"`
 	TotalPrice int64  `json:"total_price"`
 }
 
-// PayOrderRequest представляет тело запроса для оплаты заказа
+// PayOrderRequest представляет тело запроса для оплаты заказа.
 type PayOrderRequest struct {
 	PaymentMethod string `json:"payment_method"`
 }
 
-// PayOrderResponse представляет ответ на оплату заказа
+// PayOrderResponse представляет ответ на оплату заказа.
 type PayOrderResponse struct {
 	TransactionUUID string `json:"transaction_uuid"`
 }
 
-// CancelOrderResponse представляет ответ на отмену заказа (пустой)
+// CancelOrderResponse представляет ответ на отмену заказа (пустой).
 type CancelOrderResponse struct{}
 
-// OrderDTO представляет заказ в ответе API
+// OrderDTO представляет заказ в ответе API.
 type OrderDTO struct {
 	OrderUUID       string  `json:"order_uuid"`
 	HullUUID        string  `json:"hull_uuid"`
@@ -174,13 +174,13 @@ type OrderDTO struct {
 	CreatedAt       string  `json:"created_at"`
 }
 
-// ErrorResponse представляет ответ с ошибкой от API
+// ErrorResponse представляет ответ с ошибкой от API.
 type ErrorResponse struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
 
-// Вспомогательные HTTP функции
+// Вспомогательные HTTP функции.
 
 func createOrder(t *testing.T, req *CreateOrderRequest) (*CreateOrderResponse, *http.Response) {
 	t.Helper()
@@ -263,7 +263,7 @@ func cancelOrder(t *testing.T, orderUUID string) (*CancelOrderResponse, *http.Re
 	return nil, resp
 }
 
-// Тесты InventoryService (gRPC)
+// Тесты InventoryService (gRPC).
 
 func TestInventory_GetPart_Success(t *testing.T) {
 	resp, err := inventoryClient.GetPart(context.Background(), &inventoryv1.GetPartRequest{
@@ -396,7 +396,7 @@ func TestInventory_ListParts_SortedByName(t *testing.T) {
 	}
 }
 
-// Тесты ListParts.uuids
+// Тесты ListParts.uuids.
 
 func TestInventory_ListParts_ByUuids_Success(t *testing.T) {
 	uuids := []string{HullAluminumUUID, EngineIonCUUID, ShieldEnergyUUID}
@@ -503,7 +503,7 @@ func TestInventory_ListParts_ByUuids_AllParts(t *testing.T) {
 	}
 }
 
-// Тесты PaymentService (gRPC)
+// Тесты PaymentService (gRPC).
 
 func TestPayment_PayOrder_Success_Card(t *testing.T) {
 	resp, err := paymentClient.PayOrder(context.Background(), &paymentv1.PayOrderRequest{
@@ -582,7 +582,7 @@ func TestPayment_PayOrder_UniqueTransactions(t *testing.T) {
 		"каждый платёж должен генерировать уникальный UUID транзакции")
 }
 
-// Тесты OrderService (HTTP)
+// Тесты OrderService (HTTP).
 
 func TestOrder_Create_Success_MinimalParts(t *testing.T) {
 	req := &CreateOrderRequest{
@@ -915,7 +915,7 @@ func TestOrder_Cancel_AlreadyCancelled(t *testing.T) {
 	require.Equal(t, http.StatusConflict, cancelResp2.StatusCode)
 }
 
-// Дополнительные тесты валидации
+// Дополнительные тесты валидации.
 
 func TestOrder_Create_WithWeaponOnly(t *testing.T) {
 	req := &CreateOrderRequest{
@@ -999,7 +999,7 @@ func TestPayment_PayOrder_InvalidUUIDFormat(t *testing.T) {
 	testutil.AssertGRPCStatus(t, err, codes.InvalidArgument)
 }
 
-// Тесты полного жизненного цикла
+// Тесты полного жизненного цикла.
 
 func TestOrder_FullLifecycle_CreatePayGet(t *testing.T) {
 	// 1. Создаём заказ
@@ -1111,7 +1111,7 @@ func TestOrder_FullLifecycle_AllPartsPayGet(t *testing.T) {
 	assert.Equal(t, "CREDIT_CARD", *order2.PaymentMethod)
 }
 
-// Тесты отсутствия на складе (StockQuantity <= 0)
+// Тесты отсутствия на складе (StockQuantity <= 0).
 
 func TestOrder_Create_OutOfStock(t *testing.T) {
 	req := &CreateOrderRequest{
@@ -1146,7 +1146,7 @@ func TestOrder_Create_OutOfStock_OptionalPart(t *testing.T) {
 	assert.Equal(t, expectedTotal, result.TotalPrice)
 }
 
-// Тесты ogen-валидации (400 Bad Request)
+// Тесты ogen-валидации (400 Bad Request).
 
 func TestOrder_Create_InvalidBody_EmptyJSON(t *testing.T) {
 	httpReq, err := http.NewRequest(http.MethodPost, orderBaseURL()+"/api/v1/orders", bytes.NewReader([]byte("{}")))
@@ -1316,7 +1316,7 @@ func TestOrder_Cancel_InvalidUUIDInPath(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-// Тесты с shield only (без weapon)
+// Тесты с shield only (без weapon).
 
 func TestOrder_Create_WithShieldOnly(t *testing.T) {
 	req := &CreateOrderRequest{
@@ -1334,7 +1334,7 @@ func TestOrder_Create_WithShieldOnly(t *testing.T) {
 	assert.Equal(t, expectedTotal, result.TotalPrice)
 }
 
-// Тест inventory: деталь с нулевым остатком
+// Тест inventory: деталь с нулевым остатком.
 
 func TestInventory_GetPart_OutOfStock(t *testing.T) {
 	resp, err := inventoryClient.GetPart(context.Background(), &inventoryv1.GetPartRequest{

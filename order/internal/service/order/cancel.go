@@ -12,7 +12,7 @@ import (
 func (s *OrderService) Cancel(ctx context.Context, orderUUID uuid.UUID) error {
 	order, err := s.OrderRepository.Get(ctx, orderUUID)
 	if err != nil {
-		return errs.ErrOrderNotFound
+		return err
 	}
 	switch order.Status {
 	case model.OrderStatusPendingPayment:

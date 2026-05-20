@@ -131,7 +131,7 @@ func TestArch_DomainError_CancelPaid_Returns409(t *testing.T) {
 
 // TestArch_DomainError_OutOfStock_Returns409 проверяет, что ошибка
 // ErrOutOfStock из inventory-клиента поднимается через service-слой и
-// маппится в 409 (сейчас ErrOutOfStock = Conflict, а не NotFound)
+// маппится в 409 (сейчас ErrOutOfStock = Conflict, а не NotFound).
 func TestArch_DomainError_OutOfStock_Returns409(t *testing.T) {
 	_, resp := createOrder(t, &CreateOrderRequest{
 		HullUUID:   HullOutOfStockUUID,
@@ -144,7 +144,7 @@ func TestArch_DomainError_OutOfStock_Returns409(t *testing.T) {
 
 // TestArch_DomainError_CancelCancelled_Returns409 проверяет, что повторная
 // отмена уже отменённого заказа возвращает 409 (ErrOrderCancelled из
-// service-слоя), а не 200/500
+// service-слоя), а не 200/500.
 func TestArch_DomainError_CancelCancelled_Returns409(t *testing.T) {
 	created, createResp := createOrder(t, &CreateOrderRequest{
 		HullUUID:   HullAluminumUUID,
@@ -164,7 +164,7 @@ func TestArch_DomainError_CancelCancelled_Returns409(t *testing.T) {
 
 // TestArch_DomainError_InvalidPaymentMethod_Returns400 проверяет, что
 // невалидный enum payment_method отклоняется с 400 (валидация ogen на
-// границе API, не доходит до service-слоя)
+// границе API, не доходит до service-слоя).
 func TestArch_DomainError_InvalidPaymentMethod_Returns400(t *testing.T) {
 	created, createResp := createOrder(t, &CreateOrderRequest{
 		HullUUID:   HullAluminumUUID,
@@ -190,7 +190,7 @@ func TestArch_DomainError_InvalidPaymentMethod_Returns400(t *testing.T) {
 
 // TestArch_DomainError_InvalidUUIDInPath_Returns400 проверяет, что невалидный
 // UUID в path отклоняется с 400 (валидация ogen на границе API, не доходит
-// до service-слоя и не маппится в 500)
+// до service-слоя и не маппится в 500).
 func TestArch_DomainError_InvalidUUIDInPath_Returns400(t *testing.T) {
 	resp, err := httpClient.Get(orderBaseURL() + "/api/v1/orders/not-a-uuid")
 	require.NoError(t, err)

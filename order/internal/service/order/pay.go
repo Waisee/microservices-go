@@ -10,10 +10,12 @@ import (
 )
 
 func (s *OrderService) Pay(ctx context.Context, orderUUID uuid.UUID, method model.PaymentMethod) (uuid.UUID, error) {
+	// 1. Получение заказа.
 	order, err := s.OrderRepository.Get(ctx, orderUUID)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
+	// 2. Проверка статуса заказа.
 	switch order.Status {
 	case model.OrderStatusPendingPayment:
 	case model.OrderStatusPaid:
@@ -24,6 +26,7 @@ func (s *OrderService) Pay(ctx context.Context, orderUUID uuid.UUID, method mode
 		return uuid.UUID{}, errs.ErrOrderAlreadyPaid
 	}
 
+	// 3. Оплата заказа.
 	transactionUUID, err := s.PaymentClient.PayOrder(ctx, orderUUID, method)
 	if err != nil {
 		return uuid.UUID{}, err
@@ -33,6 +36,7 @@ func (s *OrderService) Pay(ctx context.Context, orderUUID uuid.UUID, method mode
 	order.PaymentMethod = &paymentMethod
 	order.Status = model.OrderStatusPaid
 
+	// 4. Обновление заказа.
 	if err := s.OrderRepository.Update(ctx, order); err != nil {
 		return uuid.UUID{}, err
 	}

@@ -159,13 +159,22 @@ tasks:
       - '{{.MOCKERY}}'
 
   test:
-    desc: "Запускает unit-тесты с race-детектором (без API-тестов из order/tests)"
-    cmds:
-      - |
-        for mod in order inventory payment; do
-          echo "=== $mod ==="
-          (cd "$mod" && MOD=$(go list -m) && go test -v -race -count=1 $(go list ./... | grep -vE "^${MOD}/tests(/|$)"))
-        done
+      desc: 'Запускает unit-тесты с race-детектором (без API-тестов из order/tests)'
+      cmds:
+        - |
+          for mod in order inventory payment; do
+            echo "=== $mod ==="
+            (cd "$mod" && go test -v -race -count=1 ./internal/...)
+          done
+          
+  # test:
+  #   desc: "Запускает unit-тесты с race-детектором (без API-тестов из order/tests)"
+  #   cmds:
+  #     - |
+  #       for mod in order inventory payment; do
+  #         echo "=== $mod ==="
+  #         (cd "$mod" && MOD=$(go list -m) && go test -v -race -count=1 $(go list ./... | grep -vE "^${MOD}/tests(/|$)"))
+  #       done
 
   coverage:clean:
     desc: "Очищает директорию с отчётами покрытия"
@@ -175,23 +184,23 @@ tasks:
       - mkdir -p {{.COVERAGE_DIR}}
 
   test:coverage:
-    desc: "Тесты с покрытием бизнес-логики (без API-тестов из order/tests)"
+    desc: 'Тесты с покрытием бизнес-логики'
     deps: [coverage:clean]
     vars:
       TARGET_PACKAGES:
         sh: |
           for mod in order inventory payment; do
-            (cd "$mod" && go list ./... | grep -v "/mocks" | grep -E '/(api|service)/')
+            (cd "$mod" && go list ./internal/... | grep -v "/mocks" | grep -E '/(api|service)/')
           done | tr '\n' ','
     preconditions:
       - sh: test -n "{{.TARGET_PACKAGES}}"
-        msg: "Не найдено пакетов для тестирования"
+        msg: 'Не найдено пакетов для тестирования'
     cmds:
       - echo "📦 Целевые пакеты:{{.TARGET_PACKAGES}}"
       - |
         for mod in order inventory payment; do
           echo "=== $mod ==="
-          (cd "$mod" && MOD=$(go list -m) && go test -v -race -covermode=atomic -coverprofile={{.COVERAGE_DIR}}/${mod}.out -coverpkg={{.TARGET_PACKAGES}} $(go list ./... | grep -vE "^${MOD}/tests(/|$)"))
+          (cd "$mod" && go test -v -race -covermode=atomic -coverprofile={{.COVERAGE_DIR}}/${mod}.out -coverpkg={{.TARGET_PACKAGES}} ./internal/...)
         done
       - echo "📊 Объединяем отчёты покрытия..."
       - |
@@ -202,6 +211,35 @@ tasks:
       - echo "📊 Покрытие по функциям:"
       - go tool cover -func={{.COVERAGE_FILE}}
       - task: coverage:threshold
+
+  # test:coverage:
+  #   desc: "Тесты с покрытием бизнес-логики (без API-тестов из order/tests)"
+  #   deps: [coverage:clean]
+  #   vars:
+  #     TARGET_PACKAGES:
+  #       sh: |
+  #         for mod in order inventory payment; do
+  #           (cd "$mod" && go list ./... | grep -v "/mocks" | grep -E '/(api|service)/')
+  #         done | tr '\n' ','
+  #   preconditions:
+  #     - sh: test -n "{{.TARGET_PACKAGES}}"
+  #       msg: "Не найдено пакетов для тестирования"
+  #   cmds:
+  #     - echo "📦 Целевые пакеты:{{.TARGET_PACKAGES}}"
+  #     - |
+  #       for mod in order inventory payment; do
+  #         echo "=== $mod ==="
+  #         (cd "$mod" && MOD=$(go list -m) && go test -v -race -covermode=atomic -coverprofile={{.COVERAGE_DIR}}/${mod}.out -coverpkg={{.TARGET_PACKAGES}} $(go list ./... | grep -vE "^${MOD}/tests(/|$)"))
+  #       done
+  #     - echo "📊 Объединяем отчёты покрытия..."
+  #     - |
+  #       head -1 {{.COVERAGE_DIR}}/order.out > {{.COVERAGE_FILE}}
+  #       for f in {{.COVERAGE_DIR}}/order.out {{.COVERAGE_DIR}}/inventory.out {{.COVERAGE_DIR}}/payment.out; do
+  #         tail -n +2 "$f" >> {{.COVERAGE_FILE}}
+  #       done
+  #     - echo "📊 Покрытие по функциям:"
+  #     - go tool cover -func={{.COVERAGE_FILE}}
+  #     - task: coverage:threshold
 
   coverage:threshold:
     desc: "Проверяет соответствие покрытия порогу"

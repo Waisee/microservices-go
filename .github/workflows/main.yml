@@ -7,6 +7,79 @@ on:
     branches: [ main, master ]
 
 jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Нужно для анализа истории коммитов
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show Go version
+        run: go version
+
+      - name: Run Coverage
+        run: task test:coverage
+
+      - name: Generate coverage badge JSON
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: |
+          COV=$(go tool cover -func=coverage/coverage.out | tail -n1 | awk '{print $NF}' | tr -d '%')
+          if awk "BEGIN {exit !($COV >= 40)}"; then COLOR=brightgreen
+          elif awk "BEGIN {exit !($COV >= 25)}"; then COLOR=yellow
+          else COLOR=red; fi
+          printf '%s\n' "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"${COV}%\",\"color\":\"${COLOR}\"}" > coverage.json
+
+      - name: Publish coverage to Gist
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ vars.GIST_ID }}
+        run: |
+          curl -sS -f -X PATCH \
+            -H "Authorization: Bearer ${GIST_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/gists/${GIST_ID}" \
+            -d "$(jq -n --rawfile content coverage.json \
+              '{files: {"coverage.json": {content: $content}}}')"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Нужно для анализа истории коммитов
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show Go version
+        run: go version
+
+      - name: Run Tests
+        run: task test
   quality-check:
     runs-on: ubuntu-latest
     steps:
