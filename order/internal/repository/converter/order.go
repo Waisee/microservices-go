@@ -2,10 +2,28 @@ package converter
 
 import (
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 
 	"github.com/waisee/microservices-go/order/internal/model"
 	"github.com/waisee/microservices-go/order/internal/repository/record"
+	"github.com/waisee/microservices-go/shared/pkg/maputil"
 )
+
+func OrderItemToRecord(item model.OrderItem) record.OrderItemRecord {
+	return record.OrderItemRecord{
+		PartUUID: item.PartUUID.String(),
+		PartType: string(item.PartType),
+		Price:    item.Price,
+	}
+}
+
+func RecordToOrderItem(item record.OrderItemRecord) model.OrderItem {
+	return model.OrderItem{
+		PartUUID: uuid.MustParse(item.PartUUID),
+		PartType: model.PartType(item.PartType),
+		Price:    item.Price,
+	}
+}
 
 func ModelToRecord(model model.Order) record.OrderRecord {
 	transactionUUID := ""
@@ -19,7 +37,7 @@ func ModelToRecord(model model.Order) record.OrderRecord {
 	status := string(model.Status)
 	return record.OrderRecord{
 		UUID:            model.UUID.String(),
-		Items:           ModelToRecordItems(model.Items),
+		Items:           lo.Map(model.Items, maputil.ToLoMap(OrderItemToRecord)),
 		TransactionUUID: transactionUUID,
 		PaymentMethod:   paymentMethod,
 		Status:          status,
@@ -27,22 +45,10 @@ func ModelToRecord(model model.Order) record.OrderRecord {
 	}
 }
 
-func ModelToRecordItems(items []model.OrderItem) []record.OrderItemRecord {
-	result := make([]record.OrderItemRecord, 0, len(items))
-	for _, item := range items {
-		result = append(result, record.OrderItemRecord{
-			PartUUID: item.PartUUID.String(),
-			PartType: string(item.PartType),
-			Price:    item.Price,
-		})
-	}
-	return result
-}
-
 func RecordToModel(record record.OrderRecord) model.Order {
 	return model.Order{
 		UUID:  uuid.MustParse(record.UUID),
-		Items: RecordToModelItems(record.Items),
+		Items: lo.Map(record.Items, maputil.ToLoMap(RecordToOrderItem)),
 		TransactionUUID: func() *uuid.UUID {
 			if record.TransactionUUID == "" {
 				return nil
@@ -60,16 +66,4 @@ func RecordToModel(record record.OrderRecord) model.Order {
 		Status:    model.OrderStatus(record.Status),
 		CreatedAt: record.CreatedAt,
 	}
-}
-
-func RecordToModelItems(items []record.OrderItemRecord) []model.OrderItem {
-	result := make([]model.OrderItem, 0, len(items))
-	for _, item := range items {
-		result = append(result, model.OrderItem{
-			PartUUID: uuid.MustParse(item.PartUUID),
-			PartType: model.PartType(item.PartType),
-			Price:    item.Price,
-		})
-	}
-	return result
 }

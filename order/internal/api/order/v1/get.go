@@ -10,6 +10,8 @@ import (
 	orderv1 "github.com/waisee/microservices-go/shared/pkg/openapi/order/v1"
 )
 
+// GetOrder возвращает заказ по UUID из пути запроса.
+// Возвращает 404, если заказ не найден.
 func (api *OrderAPI) GetOrder(ctx context.Context, params orderv1.GetOrderParams) (orderv1.GetOrderRes, error) {
 	order, err := api.orderService.Get(ctx, params.OrderUUID)
 	if err != nil {

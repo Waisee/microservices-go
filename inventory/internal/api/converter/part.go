@@ -8,17 +8,21 @@ import (
 	inventoryv1 "github.com/waisee/microservices-go/shared/pkg/proto/inventory/v1"
 )
 
-func ModelToProto(model model.Part) *inventoryv1.GetPartResponse {
+func PartModelToProto(m model.Part) *inventoryv1.Part {
+	return &inventoryv1.Part{
+		Uuid:          m.UUID,
+		Name:          m.Name,
+		Description:   m.Description,
+		Price:         m.Price,
+		PartType:      PartTypeToProto(m.PartType),
+		StockQuantity: m.StockQuantity,
+		CreatedAt:     timestamppb.New(m.CreatedAt),
+	}
+}
+
+func ModelToProto(m model.Part) *inventoryv1.GetPartResponse {
 	return &inventoryv1.GetPartResponse{
-		Part: &inventoryv1.Part{
-			Uuid:          model.UUID,
-			Name:          model.Name,
-			Description:   model.Description,
-			Price:         model.Price,
-			PartType:      PartTypeToProto(model.PartType),
-			StockQuantity: model.StockQuantity,
-			CreatedAt:     timestamppb.New(model.CreatedAt),
-		},
+		Part: PartModelToProto(m),
 	}
 }
 
@@ -87,12 +91,4 @@ func PartTypeToInput(partType inventoryv1.PartType) input.PartType {
 		return input.PartTypeWeapon
 	}
 	return input.PartTypeUnspecified
-}
-
-func ModelToProtoList(models []model.Part) []*inventoryv1.Part {
-	parts := make([]*inventoryv1.Part, 0, len(models))
-	for _, model := range models {
-		parts = append(parts, ModelToProto(model).Part)
-	}
-	return parts
 }

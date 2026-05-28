@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
 	github.com/ogen-go/ogen v1.20.1
+	github.com/samber/lo v1.53.0
 	github.com/stretchr/testify v1.11.1
 	github.com/waisee/microservices-go/inventory v0.0.0-00010101000000-000000000000
 	github.com/waisee/microservices-go/payment v0.0.0-00010101000000-000000000000

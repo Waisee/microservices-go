@@ -4,14 +4,18 @@ import (
 	"context"
 	"errors"
 
+	"github.com/samber/lo"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/waisee/microservices-go/inventory/internal/api/converter"
-	"github.com/waisee/microservices-go/inventory/internal/errors"
+	errs "github.com/waisee/microservices-go/inventory/internal/errors"
+	"github.com/waisee/microservices-go/shared/pkg/maputil"
 	inventoryv1 "github.com/waisee/microservices-go/shared/pkg/proto/inventory/v1"
 )
 
+// ListParts возвращает список деталей по фильтру из запроса.
+// Возвращает NotFound, если деталь не найдена, InvalidArgument при невалидном UUID.
 func (a *InventoryApi) ListParts(ctx context.Context, req *inventoryv1.ListPartsRequest) (*inventoryv1.ListPartsResponse, error) {
 	parts, err := a.partService.List(ctx, converter.ProtoToPartFilter(req))
 	if err != nil {
@@ -25,6 +29,6 @@ func (a *InventoryApi) ListParts(ctx context.Context, req *inventoryv1.ListParts
 	}
 
 	return &inventoryv1.ListPartsResponse{
-		Parts: converter.ModelToProtoList(parts),
+		Parts: lo.Map(parts, maputil.ToLoMap(converter.PartModelToProto)),
 	}, nil
 }

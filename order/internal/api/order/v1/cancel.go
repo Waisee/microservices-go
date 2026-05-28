@@ -9,6 +9,8 @@ import (
 	orderv1 "github.com/waisee/microservices-go/shared/pkg/openapi/order/v1"
 )
 
+// CancelOrder отменяет заказ по UUID из пути запроса.
+// Возвращает 404, если заказ не найден, 409 если заказ уже оплачен или отменён.
 func (api *OrderAPI) CancelOrder(ctx context.Context, params orderv1.CancelOrderParams) (orderv1.CancelOrderRes, error) {
 	err := api.orderService.Cancel(ctx, params.OrderUUID)
 	if err != nil {

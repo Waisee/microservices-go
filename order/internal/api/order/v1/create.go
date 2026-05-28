@@ -10,6 +10,8 @@ import (
 	orderv1 "github.com/waisee/microservices-go/shared/pkg/openapi/order/v1"
 )
 
+// CreateOrder создаёт заказ по выбранным деталям.
+// Возвращает 404 при отсутствии детали, 409 при нехватке на складе.
 func (api *OrderAPI) CreateOrder(ctx context.Context, req *orderv1.CreateOrderRequest) (orderv1.CreateOrderRes, error) {
 	order, err := api.orderService.Create(ctx, converter.ProtoToCreateOrderInput(req))
 	if err != nil {

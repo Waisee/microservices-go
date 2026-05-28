@@ -10,6 +10,9 @@ import (
 )
 
 func (s *OrderService) Pay(ctx context.Context, orderUUID uuid.UUID, method model.PaymentMethod) (uuid.UUID, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// 1. Получение заказа.
 	order, err := s.OrderRepository.Get(ctx, orderUUID)
 	if err != nil {

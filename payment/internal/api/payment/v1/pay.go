@@ -12,6 +12,8 @@ import (
 	paymentv1 "github.com/waisee/microservices-go/shared/pkg/proto/payment/v1"
 )
 
+// PayOrder проводит оплату заказа и возвращает UUID транзакции.
+// Возвращает InvalidArgument при невалидном UUID заказа или способе оплаты.
 func (a *PaymentAPI) PayOrder(ctx context.Context, in *paymentv1.PayOrderRequest) (*paymentv1.PayOrderResponse, error) {
 	input, err := converter.ProtoToPayOrderInput(in)
 	if err != nil {

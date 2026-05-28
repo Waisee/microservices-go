@@ -8,14 +8,6 @@ import (
 	inventoryv1 "github.com/waisee/microservices-go/shared/pkg/proto/inventory/v1"
 )
 
-func ModelToProtoList(parts []model.Part) []*inventoryv1.Part {
-	protos := make([]*inventoryv1.Part, 0, len(parts))
-	for _, part := range parts {
-		protos = append(protos, ModelToProto(part))
-	}
-	return protos
-}
-
 func ModelToProto(part model.Part) *inventoryv1.Part {
 	return &inventoryv1.Part{
 		Uuid:          part.UUID.String(),
@@ -40,14 +32,6 @@ func partTypeToProto(partType model.PartType) inventoryv1.PartType {
 		return inventoryv1.PartType_PART_TYPE_WEAPON
 	}
 	return inventoryv1.PartType_PART_TYPE_UNSPECIFIED
-}
-
-func ProtoToModelList(parts []*inventoryv1.Part) []model.Part {
-	models := make([]model.Part, 0, len(parts))
-	for _, part := range parts {
-		models = append(models, ProtoToModel(part))
-	}
-	return models
 }
 
 func ProtoToModel(part *inventoryv1.Part) model.Part {

@@ -12,6 +12,8 @@ import (
 	inventoryv1 "github.com/waisee/microservices-go/shared/pkg/proto/inventory/v1"
 )
 
+// GetPart возвращает деталь по UUID из запроса.
+// Возвращает NotFound, если деталь не найдена, InvalidArgument при невалидном UUID.
 func (a *InventoryApi) GetPart(ctx context.Context, req *inventoryv1.GetPartRequest) (*inventoryv1.GetPartResponse, error) {
 	part, err := a.partService.Get(ctx, req.GetUuid())
 	if err != nil {

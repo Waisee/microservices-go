@@ -2,34 +2,45 @@ package v1
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 
 	"github.com/waisee/microservices-go/order/internal/clients/grpc/inventory/v1/converter"
 	"github.com/waisee/microservices-go/order/internal/model"
+	"github.com/waisee/microservices-go/shared/pkg/maputil"
 	inventoryv1 "github.com/waisee/microservices-go/shared/pkg/proto/inventory/v1"
 )
 
+const (
+	timeout = 5 * time.Second
+)
+
 type InventoryClient struct {
-	inventoryv1.InventoryServiceClient
+	client inventoryv1.InventoryServiceClient
 }
 
-func NewInventoryClient(grpc inventoryv1.InventoryServiceClient) *InventoryClient {
+func NewInventoryClient(c inventoryv1.InventoryServiceClient) *InventoryClient {
 	return &InventoryClient{
-		InventoryServiceClient: grpc,
+		client: c,
 	}
 }
 
 func (c *InventoryClient) ListParts(ctx context.Context, uuids []uuid.UUID) ([]model.Part, error) {
-	uuidsStr := make([]string, 0, len(uuids))
-	for _, uuid := range uuids {
-		uuidsStr = append(uuidsStr, uuid.String())
-	}
-	resp, err := c.InventoryServiceClient.ListParts(ctx, &inventoryv1.ListPartsRequest{
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	uuidsStr := lo.Map(uuids, maputil.ToLoMap(func(id uuid.UUID) string {
+		return id.String()
+	}))
+
+	resp, err := c.client.ListParts(ctx, &inventoryv1.ListPartsRequest{
 		Uuids: uuidsStr,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return converter.ProtoToModelList(resp.Parts), nil
+
+	return lo.Map(resp.Parts, maputil.ToLoMap(converter.ProtoToModel)), nil
 }

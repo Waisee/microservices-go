@@ -10,6 +10,9 @@ import (
 )
 
 func (s *OrderService) Cancel(ctx context.Context, orderUUID uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	order, err := s.OrderRepository.Get(ctx, orderUUID)
 	if err != nil {
 		return err

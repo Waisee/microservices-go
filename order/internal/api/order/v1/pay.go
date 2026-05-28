@@ -10,6 +10,8 @@ import (
 	orderv1 "github.com/waisee/microservices-go/shared/pkg/openapi/order/v1"
 )
 
+// PayOrder оплачивает заказ выбранным способом оплаты.
+// Возвращает 404, если заказ не найден, 409 если заказ уже оплачен или отменён.
 func (api *OrderAPI) PayOrder(ctx context.Context, req *orderv1.PayOrderRequest, params orderv1.PayOrderParams) (orderv1.PayOrderRes, error) {
 	transactionUUID, err := api.orderService.Pay(ctx, params.OrderUUID, converter.ProtoToPaymentMethod(req))
 	if err != nil {

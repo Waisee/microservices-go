@@ -35,17 +35,19 @@ func main() {
 	// Примечание: defer lis.Close() не нужен, так как GracefulStop() закрывает listener автоматически
 
 	grpcServer := grpc.NewServer(
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			MaxConnectionIdle:     maxConnectionIdle,
-			MaxConnectionAge:      maxConnectionAge,
-			MaxConnectionAgeGrace: maxConnectionAgeGrace,
-			Time:                  keepaliveTime,
-			Timeout:               timeout,
-		}),
-		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             minTime,
-			PermitWithoutStream: true,
-		}),
+		append(app.Interceptors(),
+			grpc.KeepaliveParams(keepalive.ServerParameters{
+				MaxConnectionIdle:     maxConnectionIdle,
+				MaxConnectionAge:      maxConnectionAge,
+				MaxConnectionAgeGrace: maxConnectionAgeGrace,
+				Time:                  keepaliveTime,
+				Timeout:               timeout,
+			}),
+			grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+				MinTime:             minTime,
+				PermitWithoutStream: true,
+			}),
+		)...,
 	)
 
 	app.RegisterServices(grpcServer)
