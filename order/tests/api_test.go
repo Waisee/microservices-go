@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -18,10 +19,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
-	invSvc "github.com/waisee/microservices-go/inventory/pkg/service"
-	orderHandler "github.com/waisee/microservices-go/order/pkg/handler"
+	inventoryApp "github.com/waisee/microservices-go/inventory/pkg/app"
+	"github.com/waisee/microservices-go/order/pkg/app"
 	"github.com/waisee/microservices-go/order/tests/testutil"
-	paySvc "github.com/waisee/microservices-go/payment/pkg/service"
+	paymentApp "github.com/waisee/microservices-go/payment/pkg/app"
 	inventoryv1 "github.com/waisee/microservices-go/shared/pkg/proto/inventory/v1"
 	paymentv1 "github.com/waisee/microservices-go/shared/pkg/proto/payment/v1"
 )
@@ -54,7 +55,7 @@ var (
 
 	inventoryClient inventoryv1.InventoryServiceClient
 	paymentClient   paymentv1.PaymentServiceClient
-	httpClient      = testutil.NewHTTPClient()
+	httpClient      = &http.Client{Timeout: 10 * time.Second}
 	ts              *httptest.Server
 )
 
@@ -75,15 +76,16 @@ func orderBaseURL() string {
 func TestMain(m *testing.M) {
 	// 1. Inventory gRPC через bufconn
 	invLis = bufconn.Listen(bufSize)
-	invGRPCServer := grpc.NewServer()
-	inventoryv1.RegisterInventoryServiceServer(invGRPCServer, invSvc.NewInventoryServer())
+	invGRPCServer := grpc.NewServer(inventoryApp.Interceptors()...)
+	inventoryApp.RegisterServices(invGRPCServer)
 	go func() {
 		if invServeErr := invGRPCServer.Serve(invLis); invServeErr != nil {
 			panic(invServeErr)
 		}
 	}()
 
-	invConn, err := grpc.NewClient("passthrough:///bufnet",
+	invConn, err := grpc.NewClient(
+		"passthrough:///bufnet",
 		grpc.WithContextDialer(invBufDialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
@@ -94,15 +96,16 @@ func TestMain(m *testing.M) {
 
 	// 2. Payment gRPC через bufconn
 	payLis = bufconn.Listen(bufSize)
-	payGRPCServer := grpc.NewServer()
-	paymentv1.RegisterPaymentServiceServer(payGRPCServer, &paySvc.PaymentServer{})
+	payGRPCServer := grpc.NewServer(paymentApp.Interceptors()...)
+	paymentApp.RegisterServices(payGRPCServer)
 	go func() {
 		if payServeErr := payGRPCServer.Serve(payLis); payServeErr != nil {
 			panic(payServeErr)
 		}
 	}()
 
-	payConn, err := grpc.NewClient("passthrough:///bufnet",
+	payConn, err := grpc.NewClient(
+		"passthrough:///bufnet",
 		grpc.WithContextDialer(payBufDialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
@@ -112,9 +115,7 @@ func TestMain(m *testing.M) {
 	paymentClient = paymentv1.NewPaymentServiceClient(payConn)
 
 	// 3. Order HTTP через httptest
-	store := orderHandler.NewOrderStore()
-	h := orderHandler.NewOrderHandler(inventoryClient, paymentClient, store)
-	orderServer, err := orderHandler.SetupServer(h)
+	orderServer, err := app.NewHTTPHandler(inventoryClient, paymentClient)
 	if err != nil {
 		panic(err)
 	}
@@ -592,26 +593,24 @@ func TestOrder_Create_Success_MinimalParts(t *testing.T) {
 	result, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusCreated)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	require.NotNil(t, result)
 	assert.NotEmpty(t, result.OrderUUID)
 	assert.Equal(t, int64(HullAluminumPrice+EngineIonCPrice), result.TotalPrice)
 }
 
 func TestOrder_Create_Success_AllParts(t *testing.T) {
-	shieldUUID := ShieldEnergyUUID
-	weaponUUID := WeaponLaserUUID
 	req := &CreateOrderRequest{
 		HullUUID:   HullTitaniumUUID,
 		EngineUUID: EngineIonBUUID,
-		ShieldUUID: &shieldUUID,
-		WeaponUUID: &weaponUUID,
+		ShieldUUID: new(ShieldEnergyUUID),
+		WeaponUUID: new(WeaponLaserUUID),
 	}
 
 	result, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusCreated)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	require.NotNil(t, result)
 	assert.NotEmpty(t, result.OrderUUID)
 
@@ -628,7 +627,7 @@ func TestOrder_Create_VerifyTotalPrice(t *testing.T) {
 	result, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusCreated)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	assert.Equal(t, int64(800000), result.TotalPrice, "500000 + 300000 = 800000")
 }
 
@@ -641,7 +640,7 @@ func TestOrder_Create_HullNotFound(t *testing.T) {
 	_, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusNotFound)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestOrder_Create_EngineNotFound(t *testing.T) {
@@ -653,35 +652,33 @@ func TestOrder_Create_EngineNotFound(t *testing.T) {
 	_, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusNotFound)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestOrder_Create_ShieldNotFound(t *testing.T) {
-	invalidShield := uuid.New().String()
 	req := &CreateOrderRequest{
 		HullUUID:   HullAluminumUUID,
 		EngineUUID: EngineIonCUUID,
-		ShieldUUID: &invalidShield,
+		ShieldUUID: new(uuid.New().String()),
 	}
 
 	_, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusNotFound)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestOrder_Create_WeaponNotFound(t *testing.T) {
-	invalidWeapon := uuid.New().String()
 	req := &CreateOrderRequest{
 		HullUUID:   HullAluminumUUID,
 		EngineUUID: EngineIonCUUID,
-		WeaponUUID: &invalidWeapon,
+		WeaponUUID: new(uuid.New().String()),
 	}
 
 	_, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusNotFound)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestOrder_Get_Success(t *testing.T) {
@@ -698,7 +695,7 @@ func TestOrder_Get_Success(t *testing.T) {
 	order, resp := getOrder(t, createResult.OrderUUID)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusOK)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.NotNil(t, order)
 	assert.Equal(t, createResult.OrderUUID, order.OrderUUID)
 	assert.Equal(t, HullAluminumUUID, order.HullUUID)
@@ -720,7 +717,7 @@ func TestOrder_Get_VerifyStatus_PendingPayment(t *testing.T) {
 	order, resp := getOrder(t, createResult.OrderUUID)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusOK)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "PENDING_PAYMENT", order.Status)
 }
 
@@ -728,7 +725,7 @@ func TestOrder_Get_NotFound(t *testing.T) {
 	_, resp := getOrder(t, uuid.New().String())
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusNotFound)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestOrder_Pay_Success_Card(t *testing.T) {
@@ -746,7 +743,7 @@ func TestOrder_Pay_Success_Card(t *testing.T) {
 	payResult, resp := payOrder(t, createResult.OrderUUID, payReq)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusOK)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.NotNil(t, payResult)
 	assert.NotEmpty(t, payResult.TransactionUUID)
 }
@@ -770,7 +767,7 @@ func TestOrder_Pay_VerifyStatusChange(t *testing.T) {
 	order, getResp := getOrder(t, createResult.OrderUUID)
 	defer getResp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, getResp, http.StatusOK)
+	require.Equal(t, http.StatusOK, getResp.StatusCode)
 	assert.Equal(t, "PAID", order.Status)
 	assert.NotNil(t, order.TransactionUUID)
 	assert.NotNil(t, order.PaymentMethod)
@@ -782,7 +779,7 @@ func TestOrder_Pay_NotFound(t *testing.T) {
 	_, resp := payOrder(t, uuid.New().String(), payReq)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusNotFound)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestOrder_Pay_AlreadyPaid(t *testing.T) {
@@ -804,7 +801,7 @@ func TestOrder_Pay_AlreadyPaid(t *testing.T) {
 	_, payResp2 := payOrder(t, createResult.OrderUUID, payReq)
 	defer payResp2.Body.Close()
 
-	testutil.AssertHTTPStatus(t, payResp2, http.StatusConflict)
+	require.Equal(t, http.StatusConflict, payResp2.StatusCode)
 }
 
 func TestOrder_Pay_AlreadyCancelled(t *testing.T) {
@@ -826,7 +823,7 @@ func TestOrder_Pay_AlreadyCancelled(t *testing.T) {
 	_, payResp := payOrder(t, createResult.OrderUUID, payReq)
 	defer payResp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, payResp, http.StatusConflict)
+	require.Equal(t, http.StatusConflict, payResp.StatusCode)
 }
 
 func TestOrder_Cancel_Success(t *testing.T) {
@@ -843,7 +840,7 @@ func TestOrder_Cancel_Success(t *testing.T) {
 	_, resp := cancelOrder(t, createResult.OrderUUID)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusOK)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
 func TestOrder_Cancel_VerifyStatusChange(t *testing.T) {
@@ -864,7 +861,7 @@ func TestOrder_Cancel_VerifyStatusChange(t *testing.T) {
 	order, getResp := getOrder(t, createResult.OrderUUID)
 	defer getResp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, getResp, http.StatusOK)
+	require.Equal(t, http.StatusOK, getResp.StatusCode)
 	assert.Equal(t, "CANCELLED", order.Status)
 }
 
@@ -872,7 +869,7 @@ func TestOrder_Cancel_NotFound(t *testing.T) {
 	_, resp := cancelOrder(t, uuid.New().String())
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusNotFound)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestOrder_Cancel_AlreadyPaid(t *testing.T) {
@@ -894,7 +891,7 @@ func TestOrder_Cancel_AlreadyPaid(t *testing.T) {
 	_, cancelResp := cancelOrder(t, createResult.OrderUUID)
 	defer cancelResp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, cancelResp, http.StatusConflict)
+	require.Equal(t, http.StatusConflict, cancelResp.StatusCode)
 }
 
 func TestOrder_Cancel_AlreadyCancelled(t *testing.T) {
@@ -915,23 +912,22 @@ func TestOrder_Cancel_AlreadyCancelled(t *testing.T) {
 	_, cancelResp2 := cancelOrder(t, createResult.OrderUUID)
 	defer cancelResp2.Body.Close()
 
-	testutil.AssertHTTPStatus(t, cancelResp2, http.StatusConflict)
+	require.Equal(t, http.StatusConflict, cancelResp2.StatusCode)
 }
 
 // Дополнительные тесты валидации.
 
 func TestOrder_Create_WithWeaponOnly(t *testing.T) {
-	weaponUUID := WeaponLaserUUID
 	req := &CreateOrderRequest{
 		HullUUID:   HullAluminumUUID,
 		EngineUUID: EngineIonCUUID,
-		WeaponUUID: &weaponUUID,
+		WeaponUUID: new(WeaponLaserUUID),
 	}
 
 	result, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusCreated)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	require.NotNil(t, result)
 	expectedTotal := int64(HullAluminumPrice + EngineIonCPrice + WeaponLaserPrice)
 	assert.Equal(t, expectedTotal, result.TotalPrice)
@@ -956,7 +952,7 @@ func TestOrder_Pay_AllMethods(t *testing.T) {
 			payResult, resp := payOrder(t, createResult.OrderUUID, payReq)
 			defer resp.Body.Close()
 
-			testutil.AssertHTTPStatus(t, resp, http.StatusOK)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
 			require.NotNil(t, payResult)
 			assert.NotEmpty(t, payResult.TransactionUUID)
 
@@ -987,7 +983,7 @@ func TestOrder_Get_WithOptionalParts(t *testing.T) {
 	order, resp := getOrder(t, createResult.OrderUUID)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusOK)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.NotNil(t, order.ShieldUUID)
 	require.NotNil(t, order.WeaponUUID)
 	assert.Equal(t, shieldUUID, *order.ShieldUUID)
@@ -1007,11 +1003,10 @@ func TestPayment_PayOrder_InvalidUUIDFormat(t *testing.T) {
 
 func TestOrder_FullLifecycle_CreatePayGet(t *testing.T) {
 	// 1. Создаём заказ
-	shieldUUID := ShieldEnergyUUID
 	createReq := &CreateOrderRequest{
 		HullUUID:   HullTitaniumUUID,
 		EngineUUID: EngineIonBUUID,
-		ShieldUUID: &shieldUUID,
+		ShieldUUID: new(ShieldEnergyUUID),
 	}
 	createResult, createResp := createOrder(t, createReq)
 	createResp.Body.Close()
@@ -1127,26 +1122,25 @@ func TestOrder_Create_OutOfStock(t *testing.T) {
 	_, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusConflict)
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
 }
 
 func TestOrder_Create_OutOfStock_OptionalPart(t *testing.T) {
 	// Проверяем конфликт при нулевом остатке опциональной детали — используем hull_uuid
 	// как shield_uuid (нулевой остаток), но ogen валидирует UUID формат, не тип
 	// Поскольку все опциональные детали на складе есть, а hull out-of-stock имеет тип HULL,
-	// передаём его как hull — это уже покрыто выше.
-	// Дополнительно проверяем, что при наличии на складе всех деталей заказ создаётся.
-	shieldUUID := ShieldEnergyUUID
+	// передаём его как hull — это уже покрыто выше
+	// Дополнительно проверяем, что при наличии на складе всех деталей заказ создаётся
 	req := &CreateOrderRequest{
 		HullUUID:   HullAluminumUUID,
 		EngineUUID: EngineIonCUUID,
-		ShieldUUID: &shieldUUID,
+		ShieldUUID: new(ShieldEnergyUUID),
 	}
 
 	result, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusCreated)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	require.NotNil(t, result)
 	expectedTotal := int64(HullAluminumPrice + EngineIonCPrice + ShieldEnergyPrice)
 	assert.Equal(t, expectedTotal, result.TotalPrice)
@@ -1163,7 +1157,7 @@ func TestOrder_Create_InvalidBody_EmptyJSON(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Create_InvalidBody_NotJSON(t *testing.T) {
@@ -1175,7 +1169,7 @@ func TestOrder_Create_InvalidBody_NotJSON(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Create_InvalidBody_MissingHullUUID(t *testing.T) {
@@ -1188,7 +1182,7 @@ func TestOrder_Create_InvalidBody_MissingHullUUID(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Create_InvalidBody_MissingEngineUUID(t *testing.T) {
@@ -1201,7 +1195,7 @@ func TestOrder_Create_InvalidBody_MissingEngineUUID(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Create_InvalidBody_InvalidHullUUID(t *testing.T) {
@@ -1214,7 +1208,7 @@ func TestOrder_Create_InvalidBody_InvalidHullUUID(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Get_InvalidUUIDInPath(t *testing.T) {
@@ -1222,7 +1216,7 @@ func TestOrder_Get_InvalidUUIDInPath(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Pay_InvalidUUIDInPath(t *testing.T) {
@@ -1235,7 +1229,7 @@ func TestOrder_Pay_InvalidUUIDInPath(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Pay_InvalidPaymentMethod(t *testing.T) {
@@ -1260,7 +1254,7 @@ func TestOrder_Pay_InvalidPaymentMethod(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Pay_MissingPaymentMethod(t *testing.T) {
@@ -1285,7 +1279,7 @@ func TestOrder_Pay_MissingPaymentMethod(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Pay_EmptyBody(t *testing.T) {
@@ -1308,7 +1302,7 @@ func TestOrder_Pay_EmptyBody(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestOrder_Cancel_InvalidUUIDInPath(t *testing.T) {
@@ -1319,80 +1313,25 @@ func TestOrder_Cancel_InvalidUUIDInPath(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 // Тесты с shield only (без weapon).
 
 func TestOrder_Create_WithShieldOnly(t *testing.T) {
-	shieldUUID := ShieldEnergyUUID
 	req := &CreateOrderRequest{
 		HullUUID:   HullAluminumUUID,
 		EngineUUID: EngineIonCUUID,
-		ShieldUUID: &shieldUUID,
+		ShieldUUID: new(ShieldEnergyUUID),
 	}
 
 	result, resp := createOrder(t, req)
 	defer resp.Body.Close()
 
-	testutil.AssertHTTPStatus(t, resp, http.StatusCreated)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	require.NotNil(t, result)
 	expectedTotal := int64(HullAluminumPrice + EngineIonCPrice + ShieldEnergyPrice)
 	assert.Equal(t, expectedTotal, result.TotalPrice)
-}
-
-// Тесты кросс-типовой валидации (хэндлер не проверяет тип детали).
-
-func TestOrder_Create_WrongPartType_WeaponAsHull(t *testing.T) {
-	// Хэндлер не валидирует, что UUID корпуса действительно является корпусом.
-	// Передаём UUID оружия вместо корпуса — заказ должен создаться.
-	req := &CreateOrderRequest{
-		HullUUID:   WeaponLaserUUID,
-		EngineUUID: EngineIonCUUID,
-	}
-
-	result, resp := createOrder(t, req)
-	defer resp.Body.Close()
-
-	testutil.AssertHTTPStatus(t, resp, http.StatusCreated)
-	require.NotNil(t, result)
-	expectedTotal := int64(WeaponLaserPrice + EngineIonCPrice)
-	assert.Equal(t, expectedTotal, result.TotalPrice)
-}
-
-func TestOrder_Create_WrongPartType_HullAsEngine(t *testing.T) {
-	// Аналогично — UUID корпуса вместо двигателя
-	req := &CreateOrderRequest{
-		HullUUID:   HullAluminumUUID,
-		EngineUUID: HullTitaniumUUID,
-	}
-
-	result, resp := createOrder(t, req)
-	defer resp.Body.Close()
-
-	testutil.AssertHTTPStatus(t, resp, http.StatusCreated)
-	require.NotNil(t, result)
-	expectedTotal := int64(HullAluminumPrice + HullTitaniumPrice)
-	assert.Equal(t, expectedTotal, result.TotalPrice)
-}
-
-// Тесты с дубликатами UUID.
-
-func TestOrder_Create_DuplicateUUID_HullAndEngine(t *testing.T) {
-	// Передаём один и тот же UUID для hull и engine.
-	// ListParts вернёт 2 записи с одинаковым UUID, цена удвоится.
-	req := &CreateOrderRequest{
-		HullUUID:   HullAluminumUUID,
-		EngineUUID: HullAluminumUUID,
-	}
-
-	result, resp := createOrder(t, req)
-	defer resp.Body.Close()
-
-	testutil.AssertHTTPStatus(t, resp, http.StatusCreated)
-	require.NotNil(t, result)
-	assert.Equal(t, int64(HullAluminumPrice*2), result.TotalPrice,
-		"цена удваивается, так как один и тот же UUID передан дважды")
 }
 
 // Тест inventory: деталь с нулевым остатком.

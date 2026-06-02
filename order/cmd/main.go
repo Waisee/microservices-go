@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
-	orderHandler "github.com/waisee/microservices-go/order/pkg/handler"
+	app "github.com/waisee/microservices-go/order/pkg/app"
 	inventoryv1 "github.com/waisee/microservices-go/shared/pkg/proto/inventory/v1"
 	paymentv1 "github.com/waisee/microservices-go/shared/pkg/proto/payment/v1"
 )
@@ -76,16 +76,10 @@ func run() error {
 	}
 	defer paymentConn.Close()
 
-	// Создаём хранилище и обработчик
-	store := orderHandler.NewOrderStore()
-	h := orderHandler.NewOrderHandler(
-		inventoryv1.NewInventoryServiceClient(inventoryConn),
-		paymentv1.NewPaymentServiceClient(paymentConn),
-		store,
-	)
+	inventoryServiceClient := inventoryv1.NewInventoryServiceClient(inventoryConn)
+	paymentServiceClient := paymentv1.NewPaymentServiceClient(paymentConn)
 
-	// Создать OpenAPI сервер
-	orderServer, err := orderHandler.SetupServer(h)
+	orderServer, err := app.NewHTTPHandler(inventoryServiceClient, paymentServiceClient)
 	if err != nil {
 		return err
 	}
