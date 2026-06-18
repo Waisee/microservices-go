@@ -134,7 +134,7 @@ func TestCancel(t *testing.T) {
 			orderRepo := mocks.NewOrderRepository(t)
 			tc.setupMock(orderRepo)
 
-			svc := orderservice.NewOrderService(orderRepo, nil, nil)
+			svc := orderservice.NewOrderService(orderRepo, nil, nil, fakeTxManager{})
 			err := svc.Cancel(ctx, tc.args.orderUUID)
 
 			if tc.expected.err != nil {

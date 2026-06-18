@@ -172,7 +172,7 @@ func TestPay(t *testing.T) {
 			paymentClient := mocks.NewPaymentClient(t)
 			tc.setupMock(orderRepo, paymentClient)
 
-			svc := orderservice.NewOrderService(orderRepo, paymentClient, nil)
+			svc := orderservice.NewOrderService(orderRepo, paymentClient, nil, fakeTxManager{})
 			got, err := svc.Pay(ctx, tc.args.orderUUID, tc.args.paymentMethod)
 
 			if tc.expected.err != nil {

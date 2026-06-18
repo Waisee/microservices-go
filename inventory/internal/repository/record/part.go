@@ -5,13 +5,13 @@ import (
 )
 
 type PartRecord struct {
-	UUID          string
-	Name          string
-	Description   string
-	Price         int64
-	PartType      PartType
-	StockQuantity int64
-	CreatedAt     time.Time
+	UUID          string    `db:"uuid"`
+	Name          string    `db:"name"`
+	Description   string    `db:"description"`
+	Price         int64     `db:"price"`
+	PartType      PartType  `db:"part_type"`
+	StockQuantity int64     `db:"stock_quantity"`
+	CreatedAt     time.Time `db:"created_at"`
 }
 
 type PartType string

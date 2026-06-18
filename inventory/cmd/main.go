@@ -4,10 +4,12 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
@@ -51,8 +53,17 @@ func main() {
 		)...,
 	)
 
+	ctx := context.Background()
+	dbURI := os.Getenv("DB_URI")
+	pool, err := pgxpool.New(ctx, dbURI)
+	if err != nil {
+		slog.Error("не удалось подключиться к базе данных", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
 	// Регистрируем сервисы
-	app.RegisterServices(grpcServer)
+	app.RegisterServices(grpcServer, pool)
 
 	// Включаем reflection для postman/grpcurl
 	reflection.Register(grpcServer)

@@ -103,7 +103,7 @@ func TestGet(t *testing.T) {
 
 			tc.setupMock(orderRepo)
 
-			svc := orderservice.NewOrderService(orderRepo, nil, nil)
+			svc := orderservice.NewOrderService(orderRepo, nil, nil, fakeTxManager{})
 			got, err := svc.Get(ctx, tc.args.orderUUID)
 
 			if tc.expected.err != nil {
