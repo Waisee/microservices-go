@@ -67,49 +67,60 @@ func (r *PartRepository) Get(ctx context.Context, uuid string) (model.Part, erro
 }
 
 func (r *PartRepository) List(ctx context.Context, filter input.PartFilter) ([]model.Part, error) {
+	if len(filter.UUIDs) > 0 {
+		return r.listByUUIDs(ctx, filter.UUIDs)
+	}
+
+	return r.listByPartTypeOrAll(ctx, filter.PartType)
+}
+
+func (r *PartRepository) listByUUIDs(ctx context.Context, uuids []string) ([]model.Part, error) {
 	db := r.getter.DefaultTrOrDB(ctx, r.pool)
 
-	if len(filter.UUIDs) > 0 {
-		const query = `SELECT uuid, name, description, part_type, price, stock_quantity, created_at FROM parts WHERE uuid = ANY($1)`
+	const query = `SELECT uuid, name, description, part_type, price, stock_quantity, created_at FROM parts WHERE uuid = ANY($1)`
 
-		rows, err := db.Query(ctx, query, filter.UUIDs)
-		if err != nil {
-			return nil, fmt.Errorf("получить список деталей: %w", err)
-		}
-		defer rows.Close()
-
-		found := make(map[string]model.Part, len(filter.UUIDs))
-		for rows.Next() {
-			var p model.Part
-			if err := rows.Scan(&p.UUID, &p.Name, &p.Description, &p.PartType, &p.Price, &p.StockQuantity, &p.CreatedAt); err != nil {
-				return nil, fmt.Errorf("сканировать деталь: %w", err)
-			}
-			found[p.UUID] = p
-		}
-		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("получить список деталей: %w", err)
-		}
-
-		parts := make([]model.Part, 0, len(filter.UUIDs))
-		for _, u := range filter.UUIDs {
-			p, ok := found[u]
-			if !ok {
-				return nil, errs.ErrPartNotFound
-			}
-			parts = append(parts, p)
-		}
-		return parts, nil
+	rows, err := db.Query(ctx, query, uuids)
+	if err != nil {
+		return nil, fmt.Errorf("получить список деталей: %w", err)
 	}
+	defer rows.Close()
+
+	found := make(map[string]model.Part, len(uuids))
+	for rows.Next() {
+		var p model.Part
+		if err := rows.Scan(&p.UUID, &p.Name, &p.Description, &p.PartType, &p.Price, &p.StockQuantity, &p.CreatedAt); err != nil {
+			return nil, fmt.Errorf("сканировать деталь: %w", err)
+		}
+		found[p.UUID] = p
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("получить список деталей: %w", err)
+	}
+
+	parts := make([]model.Part, 0, len(uuids))
+	for _, u := range uuids {
+		p, ok := found[u]
+		if !ok {
+			return nil, errs.ErrPartNotFound
+		}
+		parts = append(parts, p)
+	}
+
+	return parts, nil
+}
+
+func (r *PartRepository) listByPartTypeOrAll(ctx context.Context, partType input.PartType) ([]model.Part, error) {
+	db := r.getter.DefaultTrOrDB(ctx, r.pool)
 
 	// Ветка по типу / все — сортировка по имени в SQL.
 	var (
 		query string
 		args  []any
 	)
-	if filter.PartType != input.PartTypeUnspecified {
+	if partType != input.PartTypeUnspecified {
 		query = `SELECT uuid, name, description, part_type, price, stock_quantity, created_at
 		         FROM parts WHERE part_type = $1 ORDER BY name`
-		args = []any{string(filter.PartType)}
+		args = []any{string(partType)}
 	} else {
 		query = `SELECT uuid, name, description, part_type, price, stock_quantity, created_at
 		         FROM parts ORDER BY name`

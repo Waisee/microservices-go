@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -76,7 +77,11 @@ func NewEnv(t *testing.T) *Env {
 	invLis := bufconn.Listen(bufSize)
 	invServer := grpc.NewServer(invApp.Interceptors()...)
 	invApp.RegisterServices(invServer, inventoryPool)
-	go func() { _ = invServer.Serve(invLis) }()
+	go func() {
+		if err := invServer.Serve(invLis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			t.Errorf("inventory grpc server: %v", err)
+		}
+	}()
 	t.Cleanup(invServer.Stop)
 
 	invConn, err := grpc.NewClient(
@@ -89,14 +94,22 @@ func NewEnv(t *testing.T) *Env {
 	if err != nil {
 		t.Fatalf("invConn: %v", err)
 	}
-	t.Cleanup(func() { _ = invConn.Close() })
+	t.Cleanup(func() {
+		if err := invConn.Close(); err != nil {
+			t.Logf("close inventory grpc conn: %v", err)
+		}
+	})
 	invClient := inventoryv1.NewInventoryServiceClient(invConn)
 
 	// Payment gRPC через bufconn.
 	payLis := bufconn.Listen(bufSize)
 	payServer := grpc.NewServer(payApp.Interceptors()...)
 	payApp.RegisterServices(payServer)
-	go func() { _ = payServer.Serve(payLis) }()
+	go func() {
+		if err := payServer.Serve(payLis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			t.Errorf("payment grpc server: %v", err)
+		}
+	}()
 	t.Cleanup(payServer.Stop)
 
 	payConn, err := grpc.NewClient(
@@ -109,7 +122,11 @@ func NewEnv(t *testing.T) *Env {
 	if err != nil {
 		t.Fatalf("payConn: %v", err)
 	}
-	t.Cleanup(func() { _ = payConn.Close() })
+	t.Cleanup(func() {
+		if err := payConn.Close(); err != nil {
+			t.Logf("close payment grpc conn: %v", err)
+		}
+	})
 	payClient := paymentv1.NewPaymentServiceClient(payConn)
 
 	// Order HTTP через httptest.

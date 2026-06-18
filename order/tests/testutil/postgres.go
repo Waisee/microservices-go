@@ -39,6 +39,14 @@ type dbInfo struct {
 	cleanup func()
 }
 
+func closeDBWithLog(t *testing.T, db *sql.DB, message string) {
+	t.Helper()
+
+	if err := db.Close(); err != nil {
+		t.Logf("%s: %v", message, err)
+	}
+}
+
 // sharedContainer гарантирует, что один и тот же PostgreSQL-контейнер
 // используется всеми тестами пакета. Контейнер останавливается через
 // StopShared в TestMain.
@@ -100,7 +108,7 @@ func createIsolatedDB(ctx context.Context, t *testing.T, prefix, migrationsDir s
 	if err != nil {
 		t.Fatalf("открыть admin connection: %v", err)
 	}
-	defer func() { _ = adminDB.Close() }()
+	defer closeDBWithLog(t, adminDB, "close admin connection")
 
 	if _, err = adminDB.ExecContext(ctx, fmt.Sprintf(`CREATE DATABASE %q`, dbName)); err != nil {
 		t.Fatalf("создать БД %s: %v", dbName, err)
@@ -116,31 +124,37 @@ func createIsolatedDB(ctx context.Context, t *testing.T, prefix, migrationsDir s
 	if err != nil {
 		t.Fatalf("открыть migrations connection: %v", err)
 	}
+	defer closeDBWithLog(t, migrateDB, "close migrations connection")
+
 	absDir, err := filepath.Abs(migrationsDir)
 	if err != nil {
-		_ = migrateDB.Close()
 		t.Fatalf("filepath.Abs: %v", err)
 	}
 	if err = goose.Up(migrateDB, absDir); err != nil {
-		_ = migrateDB.Close()
 		t.Fatalf("goose up: %v", err)
 	}
-	_ = migrateDB.Close()
 
 	cleanup := func() {
+		cleanupCtx := context.Background()
+
 		// Подключаемся к admin БД, чтобы дропнуть рабочую.
 		admin, err := sql.Open("pgx", baseDSN)
 		if err != nil {
+			t.Logf("cleanup open admin connection: %v", err)
 			return
 		}
-		defer func() { _ = admin.Close() }()
+		defer closeDBWithLog(t, admin, "cleanup close admin connection")
 
 		// Завершаем активные коннекты и удаляем БД.
-		_, _ = admin.Exec(fmt.Sprintf(
+		if _, err := admin.ExecContext(cleanupCtx, fmt.Sprintf(
 			`SELECT pg_terminate_backend(pid) FROM pg_stat_activity
 			 WHERE datname = '%s' AND pid <> pg_backend_pid()`, dbName,
-		))
-		_, _ = admin.Exec(fmt.Sprintf(`DROP DATABASE IF EXISTS %q`, dbName))
+		)); err != nil {
+			t.Logf("cleanup terminate backends for %s: %v", dbName, err)
+		}
+		if _, err := admin.ExecContext(cleanupCtx, fmt.Sprintf(`DROP DATABASE IF EXISTS %q`, dbName)); err != nil {
+			t.Logf("cleanup drop database %s: %v", dbName, err)
+		}
 	}
 
 	return dbInfo{Name: dbName, DSN: dsn, cleanup: cleanup}
