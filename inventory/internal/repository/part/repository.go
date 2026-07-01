@@ -2,139 +2,144 @@ package part
 
 import (
 	"context"
-	"sort"
-	"sync"
-	"time"
+	"errors"
+	"fmt"
+
+	trmpgx "github.com/avito-tech/go-transaction-manager/drivers/pgxv5/v2"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/waisee/microservices-go/inventory/internal/errors"
 	"github.com/waisee/microservices-go/inventory/internal/model"
-	"github.com/waisee/microservices-go/inventory/internal/repository/converter"
-	"github.com/waisee/microservices-go/inventory/internal/repository/record"
 	"github.com/waisee/microservices-go/inventory/internal/service/input"
 )
 
-type PartRepository struct {
-	mu    sync.RWMutex
-	parts map[string]record.PartRecord
+// TxManager определяет контракт для управления транзакциями.
+type TxManager interface {
+	Do(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-func NewPartRepository() *PartRepository {
-	parts := map[string]record.PartRecord{
-		"550e8400-e29b-41d4-a716-446655440001": {
-			UUID:          "550e8400-e29b-41d4-a716-446655440001",
-			Name:          "Алюминиевый корпус",
-			Description:   "Лёгкий корпус для небольших кораблей",
-			Price:         500000, // 5000₽
-			PartType:      record.PartTypeHull,
-			StockQuantity: 10,
-			CreatedAt:     time.Now(),
-		},
-		"550e8400-e29b-41d4-a716-446655440002": {
-			UUID:          "550e8400-e29b-41d4-a716-446655440002",
-			Name:          "Титановый корпус",
-			Description:   "Прочный корпус для средних кораблей",
-			Price:         1500000, // 15000₽
-			PartType:      record.PartTypeHull,
-			StockQuantity: 5,
-			CreatedAt:     time.Now(),
-		},
-		"550e8400-e29b-41d4-a716-446655440003": {
-			UUID:          "550e8400-e29b-41d4-a716-446655440003",
-			Name:          "Ионный двигатель C",
-			Description:   "Базовый ионный двигатель класса C",
-			Price:         300000, // 3000₽
-			PartType:      record.PartTypeEngine,
-			StockQuantity: 8,
-			CreatedAt:     time.Now(),
-		},
-		"550e8400-e29b-41d4-a716-446655440004": {
-			UUID:          "550e8400-e29b-41d4-a716-446655440004",
-			Name:          "Ионный двигатель B",
-			Description:   "Улучшенный ионный двигатель класса B",
-			Price:         800000, // 8000₽
-			PartType:      record.PartTypeEngine,
-			StockQuantity: 3,
-			CreatedAt:     time.Now(),
-		},
-		"550e8400-e29b-41d4-a716-446655440005": {
-			UUID:          "550e8400-e29b-41d4-a716-446655440005",
-			Name:          "Энергетический щит",
-			Description:   "Стандартный энергетический щит",
-			Price:         400000, // 4000₽
-			PartType:      record.PartTypeShield,
-			StockQuantity: 6,
-			CreatedAt:     time.Now(),
-		},
-		"550e8400-e29b-41d4-a716-446655440006": {
-			UUID:          "550e8400-e29b-41d4-a716-446655440006",
-			Name:          "Лазерная пушка",
-			Description:   "Точная лазерная пушка",
-			Price:         250000, // 2500₽
-			PartType:      record.PartTypeWeapon,
-			StockQuantity: 7,
-			CreatedAt:     time.Now(),
-		},
-		"550e8400-e29b-41d4-a716-446655440007": {
-			UUID:          "550e8400-e29b-41d4-a716-446655440007",
-			Name:          "Плазменный корпус",
-			Description:   "Экспериментальный корпус (нет на складе)",
-			Price:         2000000, // 20000₽
-			PartType:      record.PartTypeHull,
-			StockQuantity: 0,
-			CreatedAt:     time.Now(),
-		},
-	}
+type PartRepository struct {
+	pool      *pgxpool.Pool
+	getter    *trmpgx.CtxGetter
+	txManager TxManager
+}
+
+func NewPartRepository(pool *pgxpool.Pool, txManager TxManager) *PartRepository {
 	return &PartRepository{
-		parts: parts,
+		pool:      pool,
+		getter:    trmpgx.DefaultCtxGetter,
+		txManager: txManager,
 	}
 }
 
 func (r *PartRepository) Get(ctx context.Context, uuid string) (model.Part, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	part, ok := r.parts[uuid]
-	if !ok {
+	query := `SELECT uuid, name, description, part_type, price, stock_quantity, created_at FROM parts WHERE uuid = $1`
+	rows, err := r.getter.DefaultTrOrDB(ctx, r.pool).Query(ctx, query, uuid)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Part{}, errs.ErrPartNotFound
 	}
-	return converter.RecordToModel(part), nil
+	if err != nil {
+		return model.Part{}, fmt.Errorf("получить деталь: %w", err)
+	}
+	defer rows.Close()
+
+	var part model.Part
+	var found bool
+
+	for rows.Next() {
+		found = true
+		err = rows.Scan(&part.UUID, &part.Name, &part.Description, &part.PartType, &part.Price, &part.StockQuantity, &part.CreatedAt)
+		if err != nil {
+			return model.Part{}, fmt.Errorf("сканировать деталь: %w", err)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return model.Part{}, fmt.Errorf("прочитать деталь: %w", err)
+	}
+
+	if !found {
+		return model.Part{}, errs.ErrPartNotFound
+	}
+
+	return part, nil
 }
 
 func (r *PartRepository) List(ctx context.Context, filter input.PartFilter) ([]model.Part, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	if len(filter.UUIDs) > 0 {
-		parts := make([]model.Part, 0)
-		for _, uuid := range filter.UUIDs {
-			part, ok := r.parts[uuid]
-			if !ok {
-				return nil, errs.ErrPartNotFound
-			}
-			parts = append(parts, converter.RecordToModel(part))
-		}
-		return parts, nil
+		return r.listByUUIDs(ctx, filter.UUIDs)
 	}
 
-	if filter.PartType != input.PartTypeUnspecified {
-		parts := make([]model.Part, 0)
-		for _, part := range r.parts {
-			if part.PartType == record.PartType(filter.PartType) {
-				parts = append(parts, converter.RecordToModel(part))
-			}
+	return r.listByPartTypeOrAll(ctx, filter.PartType)
+}
+
+func (r *PartRepository) listByUUIDs(ctx context.Context, uuids []string) ([]model.Part, error) {
+	db := r.getter.DefaultTrOrDB(ctx, r.pool)
+
+	const query = `SELECT uuid, name, description, part_type, price, stock_quantity, created_at FROM parts WHERE uuid = ANY($1)`
+
+	rows, err := db.Query(ctx, query, uuids)
+	if err != nil {
+		return nil, fmt.Errorf("получить список деталей: %w", err)
+	}
+	defer rows.Close()
+
+	found := make(map[string]model.Part, len(uuids))
+	for rows.Next() {
+		var p model.Part
+		if err := rows.Scan(&p.UUID, &p.Name, &p.Description, &p.PartType, &p.Price, &p.StockQuantity, &p.CreatedAt); err != nil {
+			return nil, fmt.Errorf("сканировать деталь: %w", err)
 		}
-		sort.Slice(parts, func(i, j int) bool {
-			return parts[i].Name < parts[j].Name
-		})
-		return parts, nil
+		found[p.UUID] = p
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("получить список деталей: %w", err)
 	}
 
+	parts := make([]model.Part, 0, len(uuids))
+	for _, u := range uuids {
+		p, ok := found[u]
+		if !ok {
+			return nil, errs.ErrPartNotFound
+		}
+		parts = append(parts, p)
+	}
+
+	return parts, nil
+}
+
+func (r *PartRepository) listByPartTypeOrAll(ctx context.Context, partType input.PartType) ([]model.Part, error) {
+	db := r.getter.DefaultTrOrDB(ctx, r.pool)
+
+	// Ветка по типу / все — сортировка по имени в SQL.
+	var (
+		query string
+		args  []any
+	)
+	if partType != input.PartTypeUnspecified {
+		query = `SELECT uuid, name, description, part_type, price, stock_quantity, created_at
+		         FROM parts WHERE part_type = $1 ORDER BY name`
+		args = []any{string(partType)}
+	} else {
+		query = `SELECT uuid, name, description, part_type, price, stock_quantity, created_at
+		         FROM parts ORDER BY name`
+	}
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("получить список деталей: %w", err)
+	}
+	defer rows.Close()
 	parts := make([]model.Part, 0)
-	for _, part := range r.parts {
-		parts = append(parts, converter.RecordToModel(part))
+	for rows.Next() {
+		var p model.Part
+		if err := rows.Scan(&p.UUID, &p.Name, &p.Description, &p.PartType, &p.Price, &p.StockQuantity, &p.CreatedAt); err != nil {
+			return nil, fmt.Errorf("сканировать деталь: %w", err)
+		}
+		parts = append(parts, p)
 	}
-	sort.Slice(parts, func(i, j int) bool {
-		return parts[i].Name < parts[j].Name
-	})
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("получить список деталей: %w", err)
+	}
 	return parts, nil
 }

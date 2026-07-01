@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	orderapi "github.com/waisee/microservices-go/order/internal/api/order/v1"
 	inventoryclientv1 "github.com/waisee/microservices-go/order/internal/clients/grpc/inventory/v1"
 	paymentclientv1 "github.com/waisee/microservices-go/order/internal/clients/grpc/payment/v1"
@@ -14,7 +16,12 @@ import (
 	paymentv1 "github.com/waisee/microservices-go/shared/pkg/proto/payment/v1"
 )
 
-func NewHTTPHandler(inventoryServiceClient inventoryv1.InventoryServiceClient, paymentServiceClient paymentv1.PaymentServiceClient) (http.Handler, error) {
+func NewHTTPHandler(
+	pool *pgxpool.Pool,
+	txManager ordersvc.TxManager,
+	inventoryServiceClient inventoryv1.InventoryServiceClient,
+	paymentServiceClient paymentv1.PaymentServiceClient,
+) (http.Handler, error) {
 	inventoryClient := inventoryclientv1.NewInventoryClient(
 		inventoryServiceClient,
 	)
@@ -23,8 +30,8 @@ func NewHTTPHandler(inventoryServiceClient inventoryv1.InventoryServiceClient, p
 		paymentServiceClient,
 	)
 
-	repo := orderrepo.NewOrderRepository()
-	service := ordersvc.NewOrderService(repo, paymentClient, inventoryClient)
+	repo := orderrepo.NewOrderRepository(pool, txManager)
+	service := ordersvc.NewOrderService(repo, paymentClient, inventoryClient, txManager)
 	api := orderapi.NewOrderAPI(service)
 
 	return orderv1.NewServer(api, orderv1.WithErrorHandler(orderapi.OgenErrorHandler(slog.Default())))

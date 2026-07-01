@@ -9,8 +9,12 @@ import (
 	"syscall"
 	"time"
 
+	trmpgx "github.com/avito-tech/go-transaction-manager/drivers/pgxv5/v2"
+	"github.com/avito-tech/go-transaction-manager/trm/v2/manager"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
@@ -48,6 +52,30 @@ func main() {
 }
 
 func run() error {
+	ctx := context.Background()
+	if err := godotenv.Load("../order.env"); err != nil {
+		slog.Error("загрузка .env", "error", err)
+		return err
+	}
+	// Пул соединений с БД
+	pool, err := pgxpool.New(ctx, os.Getenv("DB_URI"))
+	if err != nil {
+		slog.Error("создание пула соединений", "error", err)
+		return err
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		slog.Error("база данных недоступна", "error", err)
+		return err
+	}
+	slog.Info("подключение к PostgreSQL установлено")
+
+	// Создаём Transaction Manager для pgx
+	txManager, err := manager.New(trmpgx.NewDefaultFactory(pool))
+	if err != nil {
+		slog.Error("создание transaction manager", "error", err)
+		return err
+	}
 	// Создаем gRPC соединение для InventoryService
 	inventoryConn, err := grpc.NewClient(inventoryServiceAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -79,7 +107,7 @@ func run() error {
 	inventoryServiceClient := inventoryv1.NewInventoryServiceClient(inventoryConn)
 	paymentServiceClient := paymentv1.NewPaymentServiceClient(paymentConn)
 
-	orderServer, err := app.NewHTTPHandler(inventoryServiceClient, paymentServiceClient)
+	orderServer, err := app.NewHTTPHandler(pool, txManager, inventoryServiceClient, paymentServiceClient)
 	if err != nil {
 		return err
 	}
